@@ -4,8 +4,8 @@ Interface between [Universal robots](https://www.universal-robots.com/) and [mc_
 ## 1. Required dependencies
 
  - [mc_rtc](https://jrl-umi3218.github.io/mc_rtc/)
- - [mc_ur5e_description](https://github.com/s-kidera/mc_rtc_project/tree/master/UR5e/mc_ur5e_description)
- - [mc_ur5e](https://github.com/s-kidera/mc_rtc_project/tree/master/UR5e/mc_ur5e)
+ - [mc_ur5e_description](https://github.com/isri-aist/mc_ur5e_description)
+ - [mc_ur5e](https://github.com/isri-aist/mc_ur5e)
  - [ur_rtde library](https://gitlab.com/sdurobotics/ur_rtde)
 
 ## 2. Install dependencies
@@ -94,9 +94,8 @@ An example of modifying "rtde_receive_interface.cpp" is as follows:
 ### Build instructions
 
 ```
-$ cd src
-$ git clone https://github.com/@MC_RTDE@
-$ cd @MC_RTDE_PATH@
+$ git clone https://github.com/isri-aist/mc_rtde
+$ cd mc_rtde
 $ mkdir build
 $ cd build
 $ cmake ..
