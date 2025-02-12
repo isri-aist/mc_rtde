@@ -1,10 +1,10 @@
 #pragma once
 
-#include <chrono>
-#include <thread>
 #include <Eigen/Core>
-#include <vector>
+#include <chrono>
 #include <map>
+#include <thread>
+#include <vector>
 
 #include <ur_rtde/rtde_control_interface.h>
 #include <ur_rtde/rtde_receive_interface.h>
@@ -13,18 +13,18 @@
 
 namespace mc_rtde
 {
-  const std::vector<std::string> ROBOT_NAMES = {"ur5e", "ur10"};
-  const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur.yaml";
-  constexpr int UR5E_JOINT_COUNT = 6;
+const std::vector<std::string> ROBOT_NAMES = {"ur5e", "ur10"};
+const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur.yaml";
+constexpr int UR_JOINT_COUNT = 6;
 
 /**
  * @brief Configuration file parameters for mc_rtde
  */
 struct URConfigParameter
 {
-  URConfigParameter()
-  : cm_(ControlMode::Position), joint_speed_(1.05), joint_acceleration_(1.4), targetIP_("localhost")
-  {}
+  URConfigParameter() : cm_(ControlMode::Position), joint_speed_(1.05), joint_acceleration_(1.4), targetIP_("localhost")
+  {
+  }
   /* Communication information with a real robot */
   /* ControlMode (position, velocity or torque) */
   ControlMode cm_;
@@ -43,9 +43,9 @@ struct URSensorInfo
 {
   URSensorInfo()
   {
-    qIn_.resize(UR5E_JOINT_COUNT);
-    dqIn_.resize(UR5E_JOINT_COUNT);
-    torqIn_.resize(UR5E_JOINT_COUNT);
+    qIn_.resize(UR_JOINT_COUNT);
+    dqIn_.resize(UR_JOINT_COUNT);
+    torqIn_.resize(UR_JOINT_COUNT);
   }
   /* Position(Angle) values */
   std::vector<double> qIn_;
@@ -62,10 +62,10 @@ struct URCommandData
 {
   URCommandData()
   {
-    qOut_.resize(UR5E_JOINT_COUNT);
-    dqOut_.resize(UR5E_JOINT_COUNT);
-    torqOut_.resize(UR5E_JOINT_COUNT);
-    for(int i = 0; i < UR5E_JOINT_COUNT; ++i)
+    qOut_.resize(UR_JOINT_COUNT);
+    dqOut_.resize(UR_JOINT_COUNT);
+    torqOut_.resize(UR_JOINT_COUNT);
+    for(int i = 0; i < UR_JOINT_COUNT; ++i)
     {
       qOut_[i] = 0.0;
       dqOut_[i] = 0.0;
@@ -126,7 +126,7 @@ public:
 
   /**
    * @brief Save the data received from the robot
-   * 
+   *
    * @param state Current sensor values information
    * @return true Success
    * @return false Could not receive
@@ -135,7 +135,7 @@ public:
 
   /**
    * @brief Set the start state values for simulation
-   * 
+   *
    * @param stance Value defined by RobotModule
    * @param state Current sensor values information
    */
@@ -143,7 +143,7 @@ public:
 
   /**
    * @brief Loop back the value of "data" to "stateIn"
-   * 
+   *
    * @param data Command data for sending to UR5e robot
    * @param state Current sensor values information
    */
@@ -151,7 +151,7 @@ public:
 
   /**
    * @brief Send control commands to the robot
-   * 
+   *
    * @param data Command data for sending to UR5e robot
    */
   void sendCmdData(URCommandData & data);

@@ -2,8 +2,8 @@
 
 #include <mc_rtc/config.h>
 
-#include <fstream>
 #include <boost/program_options.hpp>
+#include <fstream>
 
 namespace po = boost::program_options;
 
@@ -12,7 +12,7 @@ namespace
 
 /* Checking the existence of the file */
 /* Return value: true if the file exists, false otherwise */
-bool file_exists(const std::string& str)
+bool file_exists(const std::string & str)
 {
   std::ifstream fs(str);
   return fs.is_open();
@@ -23,7 +23,7 @@ bool file_exists(const std::string& str)
 /* Main function of the interface */
 int main(int argc, char * argv[])
 {
- /* Set command line arguments options */
+  /* Set command line arguments options */
   /* Usage example: MCControlRtde -h simulation -f @ETC_PATH@/mc_rtde/mc_rtc_xxxxx.yaml */
   std::string conf_file;
   std::string host;
@@ -35,7 +35,7 @@ int main(int argc, char * argv[])
   {
     check_file = "";
   }
-  
+
   // clang-format off
   desc.add_options()
     ("help", "display help message")
@@ -49,7 +49,7 @@ int main(int argc, char * argv[])
   {
     po::store(po::parse_command_line(argc, argv, desc), vm);
   }
-  catch(const std::exception& e)
+  catch(const std::exception & e)
   {
     std::cerr << e.what() << '\n';
     return 1;
@@ -69,7 +69,7 @@ int main(int argc, char * argv[])
   if(std::count(mc_rtde::ROBOT_NAMES.begin(), mc_rtde::ROBOT_NAMES.end(), gconfig.robot().name()) == 0)
   {
     std::string s;
-    for (const auto &r : mc_rtde::ROBOT_NAMES) s += r;
+    for(const auto & r : mc_rtde::ROBOT_NAMES) s += r;
     mc_rtc::log::error("[mc_rtde] This program can only handle {} at the moment", s);
     return 1;
   }

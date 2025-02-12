@@ -1,7 +1,7 @@
 #pragma once
 
-#include <mc_control/mc_global_controller.h>
 #include <condition_variable>
+#include <mc_control/mc_global_controller.h>
 #include <thread>
 
 #include "URControl.h"

@@ -18,13 +18,15 @@ MCControlRtde::MCControlRtde(mc_control::MCGlobalController & controller, const 
   auto rtdeConfig = controller.configuration().config("RTDE");
   if(!rtdeConfig.has("JointSpeed"))
   {
-    mc_rtc::log::warning("[mc_rtde] 'JointSpeed' config entry missing. Using default value: {}", config_param.joint_speed_);
+    mc_rtc::log::warning("[mc_rtde] 'JointSpeed' config entry missing. Using default value: {}",
+                         config_param.joint_speed_);
   }
   rtdeConfig("JointSpeed", config_param.joint_speed_);
 
   if(!rtdeConfig.has("JointAcceleration"))
   {
-    mc_rtc::log::warning("[mc_rtde] 'JointAcceleration' config entry missing. Using default value: {}", config_param.joint_acceleration_);
+    mc_rtc::log::warning("[mc_rtde] 'JointAcceleration' config entry missing. Using default value: {}",
+                         config_param.joint_acceleration_);
   }
   rtdeConfig("JointAcceleration", config_param.joint_acceleration_);
 
@@ -32,7 +34,7 @@ MCControlRtde::MCControlRtde(mc_control::MCGlobalController & controller, const 
   if(!rtdeConfig.has(robot_name))
   {
     mc_rtc::log::error(
-      "[mc_rtde] A name that matches the controller robot name is not defined in the configuration file");
+        "[mc_rtde] A name that matches the controller robot name is not defined in the configuration file");
     return;
   }
 
@@ -48,9 +50,8 @@ MCControlRtde::MCControlRtde(mc_control::MCGlobalController & controller, const 
   if(host != "simulation")
   {
     /* Try to connect via UDP to the robot */
-    mc_rtc::log::info("[mc_rtde] Connecting to {} robot on address {}",
-                      robot_name, config_param.targetIP_);
-  
+    mc_rtc::log::info("[mc_rtde] Connecting to {} robot on address {}", robot_name, config_param.targetIP_);
+
     robot_ = new URControl(config_param);
 
     /* Get the sensor value once */
@@ -79,17 +80,15 @@ MCControlRtde::MCControlRtde(mc_control::MCGlobalController & controller, const 
   controller.running = true;
   controller.controller().gui()->addElement(
       {"RTDE"}, mc_rtc::gui::Button("Stop controller", [&controller]() { controller.running = false; }));
-  
+
   mc_rtc::log::info("[mc_rtde] interface initialized");
 }
-
 
 /* Destructor */
 MCControlRtde::~MCControlRtde()
 {
   delete robot_;
 }
-
 
 void MCControlRtde::robotControl()
 {
@@ -109,13 +108,13 @@ void MCControlRtde::robotControl()
     globalController_.setEncoderVelocities(robot_name, state_.dqIn_);
     globalController_.setJointTorques(robot_name, state_.torqIn_);
 
-     // Run the controller
+    // Run the controller
     if(globalController_.run())
     {
       /* Update control value from the data in a robot */
       auto & robot = globalController_.controller().robots().robot(robot_name);
       const auto & rjo = robot.refJointOrder();
-      for(size_t i = 0; i < UR5E_JOINT_COUNT; ++i)
+      for(size_t i = 0; i < UR_JOINT_COUNT; ++i)
       {
         auto jIndex = robot.jointIndexByName(rjo[i]);
         cmdData_.qOut_[i] = robot.mbc().q[jIndex][0];
@@ -140,13 +139,13 @@ void MCControlRtde::robotControl()
     double elapsed = std::chrono::duration<double>(now - start_t_).count();
     if(elapsed > globalController_.timestep() * 1000)
     {
-      mc_rtc::log::warning(
-        "[mc_rtde] Loop time {} exeeded timestep of {} ms", elapsed, globalController_.timestep() * 1000);
+      mc_rtc::log::warning("[mc_rtde] Loop time {} exeeded timestep of {} ms", elapsed,
+                           globalController_.timestep() * 1000);
     }
     else
     {
-      std::this_thread::sleep_for(std::chrono::microseconds(
-          static_cast<unsigned int>((globalController_.timestep() * 1000 - elapsed)) * 1000));
+      std::this_thread::sleep_for(
+          std::chrono::microseconds(static_cast<unsigned int>((globalController_.timestep() * 1000 - elapsed)) * 1000));
     }
 
     /* Print controller data to the log */
@@ -156,7 +155,6 @@ void MCControlRtde::robotControl()
 
   robot_->controlFinished();
 }
-
 
 void MCControlRtde::addLogEntryRobotInfo()
 {
@@ -176,6 +174,5 @@ void MCControlRtde::addLogEntryRobotInfo()
   /* Torque values */
   logger_.addLogEntry("sent_joint_torque", [this]() -> const std::vector<double> & { return cmdData_.torqOut_; });
 }
-
 
 } // namespace mc_rtde

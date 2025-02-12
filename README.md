@@ -1,12 +1,16 @@
 # mc_rtde
-Interface between [Universal robots](https://www.universal-robots.com/) and [mc_rtc](https://jrl-umi3218.github.io/mc_rtc). Provides connectivity with [UR5e](https://www.universal-robots.com/products/ur5-robot/) robots.
+Interface between [Universal robots](https://www.universal-robots.com/) and [mc_rtc](https://jrl-umi3218.github.io/mc_rtc). Provides connectivity with [UR5e](https://www.universal-robots.com/products/ur5-robot/) and [UR10](https://www.universal-robots.com/products/ur10e/) robots.
 
 ## 1. Required dependencies
 
- - [mc_rtc](https://jrl-umi3218.github.io/mc_rtc/)
- - [mc_ur5e_description](https://github.com/isri-aist/mc_ur5e_description)
- - [mc_ur5e](https://github.com/isri-aist/mc_ur5e)
- - [ur_rtde library](https://gitlab.com/sdurobotics/ur_rtde)
+- [mc_rtc](https://jrl-umi3218.github.io/mc_rtc/)
+- ur10
+  - robot_module : https://github.com/isri-aist/mc_ur10
+  - description : https://github.com/isri-aist/mc_ur10_description
+- ur5e
+  - robot_module : https://github.com/isri-aist/mc_ur5e
+  - description : https://github.com/isri-aist/mc_ur5e_description
+- [ur_rtde library](https://gitlab.com/sdurobotics/ur_rtde)
 
 ## 2. Install dependencies
 
@@ -49,7 +53,7 @@ output_double_register_12,output_double_register_13,output_double_register_14,ou
 output_double_register_16,output_double_register_17,output_double_register_18,output_double_register_19, with len: 1116
 RTDE:159: Done sending RTDE_CONTROL_PACKAGE_SETUP_OUTPUTS
 RTDE:332: Receiving...
-RTDE:341: ControlHeader: 
+RTDE:341: ControlHeader:
 RTDE:342: size is: 450
 RTDE:343: command is: 79
 RTDE:399: Datatype:DOUBLE,VECTOR6D,VECTOR6D,VECTOR6D,VECTOR6D,VECTOR6D,VECTOR6D,
@@ -69,7 +73,7 @@ RTDE:287: Payload size is: 0
 RTDE:304: SENDING buf containing: S with len: 3
 RTDE:318: Done sending RTDE_CONTROL_PACKAGE_START
 RTDE:332: Receiving...
-RTDE:341: ControlHeader: 
+RTDE:341: ControlHeader:
 RTDE:342: size is: 4
 RTDE:343: command is: 83
 RTDE:407: success: 0
@@ -122,9 +126,9 @@ $ MCControlRtde --help
 
  MCControlRtde options:
    --help                                display help message
-   -h [ --host ] arg (=ur5e)             connection host, robot name or
+   -h [ --host ] arg (=ur5e)             connection host, robot name {ur5e, ur10} or
                                          "simulation"
-   -f [ --conf ] arg (=/usr/local/etc/mc_rtde/mc_rtc_ur5e.yaml)
+   -f [ --conf ] arg (=/usr/local/etc/mc_rtde/mc_rtc_ur.yaml)
                                          configuration file
 
 $ MCControlRtde -h <robot_hostname> -f <mc_rtc_configuration_file.conf>
@@ -132,7 +136,7 @@ $ MCControlRtde -h <robot_hostname> -f <mc_rtc_configuration_file.conf>
 
 Where <mc_rtc_configuration_file.yaml> is based on (e.g).
 
- `<INSTALL_PREFIX>/etc/mc_rtde/<robot>.yaml` --> `/usr/local/etc/mc_rtde/mc_rtc_ur5e.yaml`
+ `<INSTALL_PREFIX>/etc/mc_rtde/<robot>.yaml` --> `/usr/local/etc/mc_rtde/mc_rtc_ur.yaml`
 
 If you wish to run the simulation only use as a simulation (replace the `<robot_hostname>` with simulation)
 

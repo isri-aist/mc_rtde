@@ -1,6 +1,6 @@
 
-#include <mc_rtc/logging.h>
 #include "URControl.h"
+#include <mc_rtc/logging.h>
 
 namespace mc_rtde
 {
@@ -21,11 +21,11 @@ URControl::URControl(const URConfigParameter & config_param)
     ur_rtde_control_ = new ur_rtde::RTDEControlInterface(config_param.targetIP_);
     ur_rtde_receive_ = new ur_rtde::RTDEReceiveInterface(config_param.targetIP_);
   }
-  catch(const std::exception& e)
+  catch(const std::exception & e)
   {
     mc_rtc::log::error_and_throw<std::runtime_error>("[mc_rtde] Could not connect to ur robot: {}", e.what());
   }
- }
+}
 
 /**
  * @brief Interface constructor and destructor
@@ -37,11 +37,12 @@ URControl::URControl(const URConfigParameter & config_param)
 URControl::URControl(const std::string & host, const URConfigParameter & config_param)
 : ur_rtde_control_(nullptr), ur_rtde_receive_(nullptr), cm_(config_param.cm_), host_(host),
   joint_speed_(config_param.joint_speed_), joint_acceleration_(config_param.joint_acceleration_)
-{}
+{
+}
 
 /**
  * @brief Save the data received from the robot
- * 
+ *
  * @param state Current sensor values information
  * @return true Success
  * @return false Could not receive
@@ -53,14 +54,14 @@ bool URControl::getState(URSensorInfo & state)
     /* Save the data received from the robot in "state" */
     state.qIn_ = ur_rtde_receive_->getActualQ();
     state.dqIn_ = ur_rtde_receive_->getActualQd();
-    //state.torqIn_ = ur_rtde_receive_->;
+    // state.torqIn_ = ur_rtde_receive_->;
     if(state.qIn_.empty() || state.dqIn_.empty())
     {
       mc_rtc::log::error("[mc_rtde] Data could not be received");
       return false;
     }
   }
-  catch(const std::exception& e)
+  catch(const std::exception & e)
   {
     mc_rtc::log::error("[mc_rtde] Data could not be received due to an error in the ur_rtde library: {}", e.what());
     return false;
@@ -70,15 +71,14 @@ bool URControl::getState(URSensorInfo & state)
 
 /**
  * @brief Set start state values for simulation
- * 
+ *
  * @param stance Value defined by RobotModule
  * @param state Current sensor values information
  */
-void URControl::setStartState(const std::map<std::string, std::vector<double>> & stance,
-                                   URSensorInfo & state)
+void URControl::setStartState(const std::map<std::string, std::vector<double>> & stance, URSensorInfo & state)
 {
   /* Start stance */
-  for(int i = 0; i < UR5E_JOINT_COUNT; ++i)
+  for(int i = 0; i < UR_JOINT_COUNT; ++i)
   {
     state.qIn_[i] = 0.0;
     state.dqIn_[i] = 0.0;
@@ -95,7 +95,7 @@ void URControl::setStartState(const std::map<std::string, std::vector<double>> &
     state.qIn_[4] = stance.at("wrist_2_joint")[0];
     state.qIn_[5] = stance.at("wrist_3_joint")[0];
   }
-  catch(const std::exception& e)
+  catch(const std::exception & e)
   {
     mc_rtc::log::error("[mc_rtde] Failed to get the value defined by RobotModule: {}", e.what());
   }
@@ -106,14 +106,14 @@ void URControl::setStartState(const std::map<std::string, std::vector<double>> &
 
 /**
  * @brief Loop back the value of "data" to "state"
- * 
+ *
  * @param data Command data for sending to UR5e robot
  * @param state Current sensor values information
  */
 void URControl::loopbackState(const URCommandData & data, URSensorInfo & state)
 {
   /*  Set current sensor values */
-  for(int i = 0; i < UR5E_JOINT_COUNT; ++i)
+  for(int i = 0; i < UR_JOINT_COUNT; ++i)
   {
     state.qIn_[i] = data.qOut_[i];
     state.dqIn_[i] = data.dqOut_[i];
@@ -123,7 +123,7 @@ void URControl::loopbackState(const URCommandData & data, URSensorInfo & state)
 
 /**
  * @brief Send control commands to the robot
- * 
+ *
  * @param sendData Command data for sending to UR5e robot
  */
 void URControl::sendCmdData(URCommandData & sendData)
@@ -159,9 +159,10 @@ void URControl::sendCmdData(URCommandData & sendData)
         mc_rtc::log::error("[mc_rtde] Could not send command to UR5e robot");
       }
     }
-    catch(const std::exception& e)
+    catch(const std::exception & e)
     {
-      mc_rtc::log::error("[mc_rtde] The command could not be sent due to an error in the ur_rtde library: {}", e.what());
+      mc_rtc::log::error("[mc_rtde] The command could not be sent due to an error in the ur_rtde library: {}",
+                         e.what());
     }
   }
 }
