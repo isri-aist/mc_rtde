@@ -1,6 +1,6 @@
 
 #include <mc_rtc/logging.h>
-#include "UR5eControl.h"
+#include "URControl.h"
 
 namespace mc_rtde
 {
@@ -12,7 +12,7 @@ namespace mc_rtde
  *
  * @param config_param Configuration file parameters
  */
-UR5eControl::UR5eControl(const UR5eConfigParameter & config_param)
+URControl::URControl(const URConfigParameter & config_param)
 : ur_rtde_control_(nullptr), ur_rtde_receive_(nullptr), cm_(config_param.cm_), host_(""),
   joint_speed_(config_param.joint_speed_), joint_acceleration_(config_param.joint_acceleration_)
 {
@@ -23,7 +23,7 @@ UR5eControl::UR5eControl(const UR5eConfigParameter & config_param)
   }
   catch(const std::exception& e)
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>("[mc_rtde] Could not connect to ur5e robot: {}", e.what());
+    mc_rtc::log::error_and_throw<std::runtime_error>("[mc_rtde] Could not connect to ur robot: {}", e.what());
   }
  }
 
@@ -34,7 +34,7 @@ UR5eControl::UR5eControl(const UR5eConfigParameter & config_param)
  * @param host "simulation" only
  * @param config_param Configuration file parameters
  */
-UR5eControl::UR5eControl(const std::string & host, const UR5eConfigParameter & config_param)
+URControl::URControl(const std::string & host, const URConfigParameter & config_param)
 : ur_rtde_control_(nullptr), ur_rtde_receive_(nullptr), cm_(config_param.cm_), host_(host),
   joint_speed_(config_param.joint_speed_), joint_acceleration_(config_param.joint_acceleration_)
 {}
@@ -46,7 +46,7 @@ UR5eControl::UR5eControl(const std::string & host, const UR5eConfigParameter & c
  * @return true Success
  * @return false Could not receive
  */
-bool UR5eControl::getState(UR5eSensorInfo & state)
+bool URControl::getState(URSensorInfo & state)
 {
   try
   {
@@ -74,8 +74,8 @@ bool UR5eControl::getState(UR5eSensorInfo & state)
  * @param stance Value defined by RobotModule
  * @param state Current sensor values information
  */
-void UR5eControl::setStartState(const std::map<std::string, std::vector<double>> & stance,
-                                   UR5eSensorInfo & state)
+void URControl::setStartState(const std::map<std::string, std::vector<double>> & stance,
+                                   URSensorInfo & state)
 {
   /* Start stance */
   for(int i = 0; i < UR5E_JOINT_COUNT; ++i)
@@ -110,7 +110,7 @@ void UR5eControl::setStartState(const std::map<std::string, std::vector<double>>
  * @param data Command data for sending to UR5e robot
  * @param state Current sensor values information
  */
-void UR5eControl::loopbackState(const UR5eCommandData & data, UR5eSensorInfo & state)
+void URControl::loopbackState(const URCommandData & data, URSensorInfo & state)
 {
   /*  Set current sensor values */
   for(int i = 0; i < UR5E_JOINT_COUNT; ++i)
@@ -126,7 +126,7 @@ void UR5eControl::loopbackState(const UR5eCommandData & data, UR5eSensorInfo & s
  * 
  * @param sendData Command data for sending to UR5e robot
  */
-void UR5eControl::sendCmdData(UR5eCommandData & sendData)
+void URControl::sendCmdData(URCommandData & sendData)
 {
   const double speed_acceleration = 0.5;
   const bool asynchronous = true;
@@ -169,7 +169,7 @@ void UR5eControl::sendCmdData(UR5eCommandData & sendData)
 /**
  * @brief The control of the robot is finished
  */
-void UR5eControl::controlFinished()
+void URControl::controlFinished()
 {
   if(host_ != "simulation")
   {

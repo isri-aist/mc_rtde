@@ -1,5 +1,4 @@
-#ifndef _UR5ECONTROL_H_
-#define _UR5ECONTROL_H_
+#pragma once
 
 #include <chrono>
 #include <thread>
@@ -14,16 +13,16 @@
 
 namespace mc_rtde
 {
-  const std::string ROBOT_NAME = "UR5e";
-  const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur5e.yaml";
+  const std::vector<std::string> ROBOT_NAMES = {"ur5e", "ur10"};
+  const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur.yaml";
   constexpr int UR5E_JOINT_COUNT = 6;
 
 /**
  * @brief Configuration file parameters for mc_rtde
  */
-struct UR5eConfigParameter
+struct URConfigParameter
 {
-  UR5eConfigParameter()
+  URConfigParameter()
   : cm_(ControlMode::Position), joint_speed_(1.05), joint_acceleration_(1.4), targetIP_("localhost")
   {}
   /* Communication information with a real robot */
@@ -40,9 +39,9 @@ struct UR5eConfigParameter
 /**
  * @brief Current sensor values information of UR5e robot
  */
-struct UR5eSensorInfo
+struct URSensorInfo
 {
-  UR5eSensorInfo()
+  URSensorInfo()
   {
     qIn_.resize(UR5E_JOINT_COUNT);
     dqIn_.resize(UR5E_JOINT_COUNT);
@@ -59,9 +58,9 @@ struct UR5eSensorInfo
 /**
  * @brief Command data for sending to UR5e robot
  */
-struct UR5eCommandData
+struct URCommandData
 {
-  UR5eCommandData()
+  URCommandData()
   {
     qOut_.resize(UR5E_JOINT_COUNT);
     dqOut_.resize(UR5E_JOINT_COUNT);
@@ -84,7 +83,7 @@ struct UR5eCommandData
 /**
  * @brief mc_rtc control interface for UR5e robot
  */
-class UR5eControl
+class URControl
 {
   /* Communication information with a real robot */
   ur_rtde::RTDEControlInterface * ur_rtde_control_;
@@ -99,7 +98,7 @@ class UR5eControl
   /* Connection host, robot name or "simulation" */
   std::string host_;
   /* Current sensor values information */
-  UR5eSensorInfo stateIn_;
+  URSensorInfo stateIn_;
 
 public:
   /**
@@ -108,7 +107,7 @@ public:
    *
    * @param config_param Configuration file parameters
    */
-  UR5eControl(const UR5eConfigParameter & config_param);
+  URControl(const URConfigParameter & config_param);
 
   /**
    * @brief Interface constructor and destructor
@@ -117,9 +116,9 @@ public:
    * @param host "simulation" only
    * @param config_param Configuration file parameters
    */
-  UR5eControl(const std::string & host, const UR5eConfigParameter & config_param);
+  URControl(const std::string & host, const URConfigParameter & config_param);
 
-  ~UR5eControl()
+  ~URControl()
   {
     delete ur_rtde_control_;
     delete ur_rtde_receive_;
@@ -132,7 +131,7 @@ public:
    * @return true Success
    * @return false Could not receive
    */
-  bool getState(UR5eSensorInfo & state);
+  bool getState(URSensorInfo & state);
 
   /**
    * @brief Set the start state values for simulation
@@ -140,7 +139,7 @@ public:
    * @param stance Value defined by RobotModule
    * @param state Current sensor values information
    */
-  void setStartState(const std::map<std::string, std::vector<double>> & stance, UR5eSensorInfo & state);
+  void setStartState(const std::map<std::string, std::vector<double>> & stance, URSensorInfo & state);
 
   /**
    * @brief Loop back the value of "data" to "stateIn"
@@ -148,14 +147,14 @@ public:
    * @param data Command data for sending to UR5e robot
    * @param state Current sensor values information
    */
-  void loopbackState(const UR5eCommandData & data, UR5eSensorInfo & state);
+  void loopbackState(const URCommandData & data, URSensorInfo & state);
 
   /**
    * @brief Send control commands to the robot
    * 
    * @param data Command data for sending to UR5e robot
    */
-  void sendCmdData(UR5eCommandData & data);
+  void sendCmdData(URCommandData & data);
 
   /**
    * @brief The control of the robot is finished
@@ -164,4 +163,3 @@ public:
 };
 
 } // namespace mc_rtde
-#endif

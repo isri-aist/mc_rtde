@@ -4,7 +4,7 @@
 #include <condition_variable>
 #include <thread>
 
-#include "UR5eControl.h"
+#include "URControl.h"
 
 namespace mc_rtde
 {
@@ -42,9 +42,9 @@ private:
   /*! Connection host */
   std::string host_;
 
-  UR5eControl * robot_;
-  UR5eSensorInfo state_;
-  UR5eCommandData cmdData_;
+  URControl * robot_;
+  URSensorInfo state_;
+  URCommandData cmdData_;
   mc_rtc::Logger logger_;
   double delay_;
 };

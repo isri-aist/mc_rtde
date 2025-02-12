@@ -39,7 +39,7 @@ int main(int argc, char * argv[])
   // clang-format off
   desc.add_options()
     ("help", "display help message")
-    ("host,h", po::value<std::string>(&host)->default_value("ur5e"), "connection host, robot name or \"simulation\"")
+    ("host,h", po::value<std::string>(&host)->default_value("ur5e"), "connection host, robot name {ur5e, ur10} or \"simulation\"")
     ("conf,f", po::value<std::string>(&conf_file)->default_value(check_file), "configuration file");
   // clang-format on
 
@@ -66,13 +66,11 @@ int main(int argc, char * argv[])
   mc_control::MCGlobalController gconfig(conf_file, nullptr);
 
   /* Check that the interface can work with the main controller robot */
-  std::string module_name;
-  module_name.resize(mc_rtde::ROBOT_NAME.size());
-  std::transform(mc_rtde::ROBOT_NAME.begin(), mc_rtde::ROBOT_NAME.end(), module_name.begin(), ::tolower);
-  if(gconfig.robot().name() != module_name)
+  if(std::count(mc_rtde::ROBOT_NAMES.begin(), mc_rtde::ROBOT_NAMES.end(), gconfig.robot().name()) == 0)
   {
-    mc_rtc::log::error(
-        "[mc_rtde] This program can only handle '" + mc_rtde::ROBOT_NAME + "' at the moment");
+    std::string s;
+    for (const auto &r : mc_rtde::ROBOT_NAMES) s += r;
+    mc_rtc::log::error("[mc_rtde] This program can only handle {} at the moment", s);
     return 1;
   }
 

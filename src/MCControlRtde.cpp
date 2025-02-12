@@ -14,7 +14,7 @@ MCControlRtde::MCControlRtde(mc_control::MCGlobalController & controller, const 
   logger_(mc_rtc::Logger::Policy::THREADED, "/tmp", "mc_rtde-" + controller.robot().name()), delay_(0.0)
 {
   // Get parameter values from the configuration file
-  UR5eConfigParameter config_param;
+  URConfigParameter config_param;
   auto rtdeConfig = controller.configuration().config("RTDE");
   if(!rtdeConfig.has("JointSpeed"))
   {
@@ -51,7 +51,7 @@ MCControlRtde::MCControlRtde(mc_control::MCGlobalController & controller, const 
     mc_rtc::log::info("[mc_rtde] Connecting to {} robot on address {}",
                       robot_name, config_param.targetIP_);
   
-    robot_ = new UR5eControl(config_param);
+    robot_ = new URControl(config_param);
 
     /* Get the sensor value once */
     if(!robot_->getState(state_))
@@ -62,7 +62,7 @@ MCControlRtde::MCControlRtde(mc_control::MCGlobalController & controller, const 
   else
   {
     mc_rtc::log::info("[mc_rtde] Running simulation only. No connection to real robot");
-    robot_ = new UR5eControl(host, config_param);
+    robot_ = new URControl(host, config_param);
 
     /* Set start state values */
     auto & robot = controller.controller().robots().robot(robot_name);

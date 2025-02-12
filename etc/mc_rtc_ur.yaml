@@ -6,3 +6,6 @@ RTDE:
 
   ur5e: # Name of the robot in the controller
     IP: "localhost"
+
+  ur10: # Name of the robot in the controller
+    IP: "localhost"

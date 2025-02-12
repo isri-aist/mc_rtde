@@ -7,13 +7,13 @@ find_package(ur_rtde REQUIRED)
 
 set(HEADERS
   MCControlRtde.h
-  UR5eControl.h
+  URControl.h
   ControlMode.h
 )
 
 set(SOURCES
   main.cpp
-  UR5eControl.cpp
+  URControl.cpp
   MCControlRtde.cpp
 )
 
