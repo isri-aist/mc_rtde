@@ -140,15 +140,25 @@ If you wish to run the simulation only use as a simulation (replace the `<robot_
 $ MCControlRtde -h simulation
 ```
 
-Your mc_rtc configuration file (typically ) should contain the following lines: `/usr/local/etc/mc_rtde/mc_rtc_ur5e.yaml`
+Your mc_rtc configuration file (`~/.config/mc_rtc/mc_rtc.yaml`) should contain the following lines:
 
 ```
+MainRobot: UR5e # or UR10
+Enabled: YourController
+Timestep: 0.001
+
+# Set a LogPolicy suitable for real-time
+LogPolicy : threaded
+
 # Interface specific parameters (mc_rtde)
 RTDE:
   JointSpeed: 1.05  # joint speed [rad/s]
   JointAcceleration: 1.4  # joint acceleration [rad/s^2]
 
   ur5e: # Name of the robot in the controller
+    IP: "localhost"
+
+  ur10:
     IP: "localhost"
 ```
 
