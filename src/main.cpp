@@ -1,86 +1,76 @@
-#include "MCControlRtde.h"
+/* Copyright 2020 mc_rtc development team */
 
-#include <mc_rtc/config.h>
+#include <errno.h>
+#include <linux/sched.h>
+#include <linux/sched/types.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <syscall.h>
+#include <unistd.h>
 
-#include <boost/program_options.hpp>
-#include <fstream>
+#include "thread.h"
 
-namespace po = boost::program_options;
-
-namespace
+int sched_setattr(pid_t pid, const struct sched_attr * attr, unsigned int flags)
 {
-
-/* Checking the existence of the file */
-/* Return value: true if the file exists, false otherwise */
-bool file_exists(const std::string & str)
-{
-  std::ifstream fs(str);
-  return fs.is_open();
+  return syscall(__NR_sched_setattr, pid, attr, flags);
 }
 
-} // namespace
-
-/* Main function of the interface */
 int main(int argc, char * argv[])
 {
-  /* Set command line arguments options */
-  /* Usage example: MCControlRtde -h simulation -f @ETC_PATH@/mc_rtde/mc_rtc_xxxxx.yaml */
-  std::string conf_file;
-  std::string host;
-  po::options_description desc(std::string("MCControlRtde options"));
+  struct sched_attr attr;
 
-  // Get the configuration file path dedicated to this program
-  std::string check_file = mc_rtde::CONFIGURATION_FILE;
-  if(!file_exists(check_file))
+  /* Lock memory */
+  if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
   {
-    check_file = "";
+    printf("mlockall failed: %m\n");
+    if(errno == ENOMEM)
+    {
+      printf("\nIt is likely your user does not have enough memory limits, you can change the limits by adding the "
+             "following line to /etc/security/limits.conf:\n\n");
+      printf("%s - memlock 1000000000\n\n", getlogin());
+      printf("Then log-in and log-out\n");
+    }
+    return -2;
   }
 
-  // clang-format off
-  desc.add_options()
-    ("help", "display help message")
-    ("host,h", po::value<std::string>(&host)->default_value("ur5e"), "connection host, robot name {ur5e, ur10} or \"simulation\"")
-    ("conf,f", po::value<std::string>(&conf_file)->default_value(check_file), "configuration file");
-  // clang-format on
+  /* Configure deadline policy */
+  memset(&attr, 0, sizeof(attr));
+  attr.size = sizeof(attr);
 
-  /* Parse command line arguments */
-  po::variables_map vm;
-  try
+  uint64_t cycle_ns = 1 * 1000 * 1000; // 1 ms default cycle
+  char * MC_RT_FREQ = nullptr;
+  if((MC_RT_FREQ = getenv("MC_RT_FREQ")) != nullptr)
   {
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-  }
-  catch(const std::exception & e)
-  {
-    std::cerr << e.what() << '\n';
-    return 1;
-  }
-  po::notify(vm);
-  if(vm.count("help"))
-  {
-    std::cout << desc << std::endl;
-    return 1;
-  }
-  mc_rtc::log::info("[mc_rtde] Reading additional configuration from {}", conf_file);
-
-  /* Create global controller */
-  mc_control::MCGlobalController gconfig(conf_file, nullptr);
-
-  /* Check that the interface can work with the main controller robot */
-  if(std::count(mc_rtde::ROBOT_NAMES.begin(), mc_rtde::ROBOT_NAMES.end(), gconfig.robot().name()) == 0)
-  {
-    std::string s;
-    for(const auto & r : mc_rtde::ROBOT_NAMES) s += r;
-    mc_rtc::log::error("[mc_rtde] This program can only handle {} at the moment", s);
-    return 1;
+    cycle_ns = atoi(MC_RT_FREQ) * 1000 * 1000;
   }
 
-  /* Create MCControlRtde interface */
-  mc_rtde::MCControlRtde mc_control_rtde(gconfig, host);
+  /* Initialize callback (non real-time yet) */
+  void * data = mc_rtde::init(argc, argv, cycle_ns);
+  if(!data)
+  {
+    printf("Initialization failed\n");
+    return -2;
+  }
 
-  /* Run of the robot control loop */
-  mc_control_rtde.robotControl();
+  /* Time reservation */
+  attr.sched_policy = SCHED_DEADLINE;
+  attr.sched_runtime = attr.sched_deadline = attr.sched_period = cycle_ns; // nanoseconds
 
-  mc_rtc::log::info("[mc_rtde] Terminated");
+  printf("Running real-time thread at %fms per cycle\n", cycle_ns / 1e6);
+
+  /* Set scheduler policy */
+  if(sched_setattr(0, &attr, 0) < 0)
+  {
+    printf("sched_setattr failed: %m\n");
+    return -2;
+  }
+
+  /* Run */
+  mc_rtde::run(data);
 
   return 0;
 }

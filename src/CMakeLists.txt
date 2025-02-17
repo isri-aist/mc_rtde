@@ -5,9 +5,9 @@ find_package(mc_rtc REQUIRED)
 find_package(Boost REQUIRED COMPONENTS program_options thread)
 find_package(ur_rtde REQUIRED)
 
-set(HEADERS MCControlRtde.h URControl.h ControlMode.h)
+set(HEADERS URControlType.h URControl.h ControlMode.h thread.h)
 
-set(SOURCES main.cpp URControl.cpp MCControlRtde.cpp)
+set(SOURCES main.cpp URControl.cpp)
 
 add_executable(${PROGRAM_NAME} ${SOURCES} ${HEADERS})
 target_link_libraries(${PROGRAM_NAME} PUBLIC mc_rtc::mc_control

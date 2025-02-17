@@ -1,180 +1,260 @@
 
 #include "URControl.h"
+#include "ControlMode.h"
+#include <condition_variable>
+#include <ctime>
+#include <exception>
+#include <mc_control/mc_global_controller.h>
 #include <mc_rtc/logging.h>
+#include <mutex>
+#include <thread>
+
+#include <boost/program_options.hpp>
+namespace po = boost::program_options;
 
 namespace mc_rtde
 {
 
-/**
- * @brief Interface constructor and destructor
- * UDP connection with robot using specified parameters.
- * Control level is set to LOW-level.
- *
- * @param config_param Configuration file parameters
- */
-URControl::URControl(const URConfigParameter & config_param)
-: ur_rtde_control_(nullptr), ur_rtde_receive_(nullptr), cm_(config_param.cm_), host_(""),
-  joint_speed_(config_param.joint_speed_), joint_acceleration_(config_param.joint_acceleration_)
+struct ControlLoopDataBase
 {
-  try
-  {
-    ur_rtde_control_ = new ur_rtde::RTDEControlInterface(config_param.targetIP_);
-    ur_rtde_receive_ = new ur_rtde::RTDEReceiveInterface(config_param.targetIP_);
-  }
-  catch(const std::exception & e)
-  {
-    mc_rtc::log::error_and_throw<std::runtime_error>("[mc_rtde] Could not connect to ur robot: {}", e.what());
-  }
-}
 
-/**
- * @brief Interface constructor and destructor
- * Running simulation only. No connection to real robot.
- *
- * @param host "simulation" only
- * @param config_param Configuration file parameters
- */
-URControl::URControl(const std::string & host, const URConfigParameter & config_param)
-: ur_rtde_control_(nullptr), ur_rtde_receive_(nullptr), cm_(config_param.cm_), host_(host),
-  joint_speed_(config_param.joint_speed_), joint_acceleration_(config_param.joint_acceleration_)
-{
-}
+  ControlLoopDataBase(ControlMode cm) : cm_(cm), controller_(nullptr), ur_threads_(nullptr){};
 
-/**
- * @brief Save the data received from the robot
- *
- * @param state Current sensor values information
- * @return true Success
- * @return false Could not receive
- */
-bool URControl::getState(URSensorInfo & state)
-{
-  try
-  {
-    /* Save the data received from the robot in "state" */
-    state.qIn_ = ur_rtde_receive_->getActualQ();
-    state.dqIn_ = ur_rtde_receive_->getActualQd();
-    // state.torqIn_ = ur_rtde_receive_->;
-    if(state.qIn_.empty() || state.dqIn_.empty())
-    {
-      mc_rtc::log::error("[mc_rtde] Data could not be received");
-      return false;
-    }
-  }
-  catch(const std::exception & e)
-  {
-    mc_rtc::log::error("[mc_rtde] Data could not be received due to an error in the ur_rtde library: {}", e.what());
-    return false;
-  }
-  return true;
-}
-
-/**
- * @brief Set start state values for simulation
- *
- * @param stance Value defined by RobotModule
- * @param state Current sensor values information
- */
-void URControl::setStartState(const std::map<std::string, std::vector<double>> & stance, URSensorInfo & state)
-{
-  /* Start stance */
-  for(int i = 0; i < UR_JOINT_COUNT; ++i)
-  {
-    state.qIn_[i] = 0.0;
-    state.dqIn_[i] = 0.0;
-    state.torqIn_[i] = 0.0;
-  }
-
-  /* Set position(Angle) values */
-  try
-  {
-    state.qIn_[0] = stance.at("shoulder_pan_joint")[0];
-    state.qIn_[1] = stance.at("shoulder_lift_joint")[0];
-    state.qIn_[2] = stance.at("elbow_joint")[0];
-    state.qIn_[3] = stance.at("wrist_1_joint")[0];
-    state.qIn_[4] = stance.at("wrist_2_joint")[0];
-    state.qIn_[5] = stance.at("wrist_3_joint")[0];
-  }
-  catch(const std::exception & e)
-  {
-    mc_rtc::log::error("[mc_rtde] Failed to get the value defined by RobotModule: {}", e.what());
-  }
-
-  /* copy to private member state */
-  stateIn_ = state;
+  ControlMode cm_;
+  mc_control::MCGlobalController * controller_;
+  std::thread * controller_run_;
+  std::condition_variable controller_run_cv_;
+  std::vector<std::thread> * ur_threads_;
 };
 
-/**
- * @brief Loop back the value of "data" to "state"
- *
- * @param data Command data for sending to UR5e robot
- * @param state Current sensor values information
- */
-void URControl::loopbackState(const URCommandData & data, URSensorInfo & state)
+template<ControlMode cm>
+struct ControlLoopData : public ControlLoopDataBase
 {
-  /*  Set current sensor values */
-  for(int i = 0; i < UR_JOINT_COUNT; ++i)
+  ControlLoopData() : ControlLoopDataBase(cm), urs(nullptr){};
+
+  std::vector<URControlLoop<cm>> * urs;
+};
+
+template<ControlMode cm>
+void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & qconfig)
+{
+  auto rtdeConfig = qconfig.config("RTDE");
+
+  auto loop_data = new ControlLoopData<cm>();
+  loop_data->controller_ = new mc_control::MCGlobalController(qconfig);
+  loop_data->ur_threads_ = new std::vector<std::thread>();
+  auto & controller = *loop_data->controller_;
+
+  if(controller.controller().timeStep < 0.002)
   {
-    state.qIn_[i] = data.qOut_[i];
-    state.dqIn_[i] = data.dqOut_[i];
-    state.torqIn_[i] = data.torqOut_[i];
+    mc_rtc::log::error_and_throw("[mc_rtde] mc_rtc cannot run faster than 2kHz with mc_rtde");
+  }
+
+  size_t n_steps = std::ceil(controller.controller().timeStep / 0.001);
+  size_t freq = std::ceil(1 / controller.controller().timeStep);
+  mc_rtc::log::info("[mc_rtde] mc_rtc running at {}Hz, will interpolate every {} ur control step", freq, n_steps);
+  auto & robots = controller.controller().robots();
+  // Initialize all real robots
+  for(size_t i = controller.realRobots().size(); i < robots.size(); ++i)
+  {
+    controller.realRobots().robotCopy(robots.robot(i), robots.robot(i).name());
+  }
+  // Initialize controlled ur robots
+  loop_data->urs = new std::vector<URControlLoop<cm>>();
+  auto & urs = *loop_data->urs;
+
+  std::vector<std::thread> ur_init_thread;
+  std::mutex ur_init_mutex;
+  std::condition_variable ur_init_cv;
+  bool ur_init_ready = false;
+  for(auto & robot : robots)
+  {
+    if(robot.mb().nrDof() == 0)
+    {
+      continue;
+    }
+
+    if(rtdeConfig.has(robot.name()))
+    {
+      std::string ip = rtdeConfig(robot.name())("ip");
+      ur_init_thread.emplace_back(
+          [&, ip]()
+          {
+            {
+              std::unique_lock<std::mutex> lock(ur_init_mutex);
+              ur_init_cv.wait(lock, [&ur_init_ready]() { return ur_init_ready; });
+            }
+
+            auto ur = std::unique_ptr<URControlLoop<cm>>(new URControlLoop<cm>(robot.name(), ip));
+            std::unique_lock<std::mutex> lock(ur_init_mutex);
+          });
+    }
+    else
+    {
+      mc_rtc::log::warning("The loaded controller uses an actuated robot that is not configured and not ignored: {}",
+                           robot.name());
+    }
+  }
+
+  ur_init_ready = true;
+  ur_init_cv.notify_all();
+  for(auto & th : ur_init_thread)
+  {
+    th.join();
+  }
+
+  for(auto & ur : urs)
+  {
+    ur.init(controller);
+  }
+
+  controller.init(robots.robot().encoderValues());
+  controller.running = true;
+  controller.controller().gui()->addElement(
+      {"RTDE"}, mc_rtc::gui::Button("Stop controller", [&controller]() { controller.running = false; }));
+
+  // Start ur control loop
+  static std::mutex startMutex;
+  static std::condition_variable startCV;
+  static bool startControl = false;
+
+  for(auto & ur : urs)
+  {
+    loop_data->ur_threads_->emplace_back(
+        [&]() { ur.controlThread(controller, startMutex, startCV, startControl, controller.running); });
+  }
+
+  startControl = true;
+  startCV.notify_all();
+
+  loop_data->controller_run_ = new std::thread(
+      [loop_data]()
+      {
+        auto controller_ptr = loop_data->controller_;
+        auto & controller = *controller_ptr;
+        auto & urs_ = *loop_data->urs;
+        std::mutex controller_run_mtx;
+        std::timespec tv;
+        clock_gettime(CLOCK_REALTIME, &tv);
+        // Current time in milliseconds
+        double current_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6;
+        // Will record the time that passed between two runs
+        double elapsed_t = 0;
+        controller.controller().logger().addLogEntry("mc_franka_delay", [&elapsed_t]() { return elapsed_t; });
+        while(controller.running)
+        {
+          std::unique_lock lck(controller_run_mtx);
+          loop_data->controller_run_cv_.wait(lck);
+          clock_gettime(CLOCK_REALTIME, &tv);
+          elapsed_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6 - current_t;
+          current_t = elapsed_t + current_t;
+
+          // Update from ur sensors
+          for(auto & ur : urs_)
+          {
+            ur.updateSensors(controller);
+          }
+
+          // Run the controller
+          controller.run();
+
+          // Update ur commands
+          for(auto & ur : urs_)
+          {
+            ur.updateControl(controller);
+          }
+        }
+      });
+
+  return loop_data;
+}
+
+template<ControlMode cm>
+void run_impl(void * data)
+{
+  auto control_data = static_cast<ControlLoopData<cm> *>(data);
+  auto controller_ptr = control_data->controller_;
+  auto & controller = *controller_ptr;
+  while(controller.running)
+  {
+    control_data->controller_run_cv_.notify_one();
+    // Sleep until the next cycle
+    sched_yield();
+  }
+  for(auto & th : *control_data->ur_threads_)
+  {
+    th.join();
+  }
+  control_data->controller_run_->join();
+  delete control_data->urs;
+  delete controller_ptr;
+}
+
+void run(void * data)
+{
+  auto control_data = static_cast<ControlLoopDataBase *>(data);
+  switch(control_data->cm_)
+  {
+    case ControlMode::Position:
+      run_impl<ControlMode::Position>(data);
+      break;
+    case ControlMode::Velocity:
+      run_impl<ControlMode::Velocity>(data);
+      break;
+    case ControlMode::Torque:
+      run_impl<ControlMode::Torque>(data);
+      break;
   }
 }
 
-/**
- * @brief Send control commands to the robot
- *
- * @param sendData Command data for sending to UR5e robot
- */
-void URControl::sendCmdData(URCommandData & sendData)
+void * init(int argc, char * argv[], uint64_t & cycle_ns)
 {
-  const double speed_acceleration = 0.5;
-  const bool asynchronous = true;
-  const std::vector<double> task_frame = {0, 0, 0, 0, 0, 0};
-  const std::vector<int> selection_vector = {1, 1, 1, 1, 1, 1};
-  const int force_type = 2;
-  const std::vector<double> limits = {2, 2, 1.5, 1, 1, 1};
-  bool ret;
+  std::string conf_file = "";
+  po::options_description desc("MCControlRTDE options");
+  // clang-format off
+   desc.add_options()
+    ("help", "Display help message")
+    ("conf,f", po::value<std::string>(&conf_file), "Configuration file");
+  // clang-format on
 
-  if(host_ != "simulation")
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
+
+  if(vm.count("help"))
   {
-    try
+    std::cout << desc << "\n";
+    std::cout << "see etc/mc_rtc_ur.yaml for ur_rtde configuration\n";
+    return nullptr;
+  }
+
+  mc_control::MCGlobalController::GlobalConfiguration gconfig(conf_file, nullptr);
+  if(!gconfig.config.has("Franka"))
+  {
+    mc_rtc::log::error_and_throw<std::runtime_error>(
+        "No Franka section in the configuration, see etc/sample.yaml for an example");
+  }
+  auto frankaConfig = gconfig.config("Franka");
+  ControlMode cm = frankaConfig("ControlMode", ControlMode::Velocity);
+  bool ShowNetworkWarnings = frankaConfig("ShowNetworkWarnings", true);
+  try
+  {
+    switch(cm)
     {
-      /* Send command data */
-      ret = false;
-      switch(cm_)
-      {
-        case mc_rtde::ControlMode::Position:
-          ret = ur_rtde_control_->moveJ(sendData.qOut_, joint_speed_, joint_acceleration_, asynchronous);
-          break;
-        case mc_rtde::ControlMode::Velocity:
-          ret = ur_rtde_control_->speedJ(sendData.dqOut_, speed_acceleration);
-          break;
-        case mc_rtde::ControlMode::Torque:
-          ret = ur_rtde_control_->forceMode(task_frame, selection_vector, sendData.torqOut_, force_type, limits);
-          break;
-      }
-      if(!ret)
-      {
-        mc_rtc::log::error("[mc_rtde] Could not send command to UR5e robot");
-      }
-    }
-    catch(const std::exception & e)
-    {
-      mc_rtc::log::error("[mc_rtde] The command could not be sent due to an error in the ur_rtde library: {}",
-                         e.what());
+      case ControlMode::Position:
+        return global_thread_init<ControlMode::Position>(gconfig);
+      case ControlMode::Velocity:
+        return global_thread_init<ControlMode::Velocity>(gconfig);
+      case ControlMode::Torque:
+        return global_thread_init<ControlMode::Torque>(gconfig);
+      default:
+        return nullptr;
     }
   }
-}
-
-/**
- * @brief The control of the robot is finished
- */
-void URControl::controlFinished()
-{
-  if(host_ != "simulation")
+  catch(const std::exception & e)
   {
-    ur_rtde_control_->stopScript();
+    std::cerr << "mc_rtde::Exception " << e.what() << "\n";
+    return nullptr;
   }
 }
 

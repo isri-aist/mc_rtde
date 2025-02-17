@@ -1,165 +1,141 @@
 #pragma once
 
-#include <Eigen/Core>
-#include <chrono>
-#include <map>
-#include <thread>
-#include <vector>
+#include <condition_variable>
+
+#include <mc_control/mc_global_controller.h>
 
 #include <ur_rtde/rtde_control_interface.h>
 #include <ur_rtde/rtde_receive_interface.h>
 
 #include "ControlMode.h"
+#include "URControlType.h"
 
 namespace mc_rtde
 {
 const std::vector<std::string> ROBOT_NAMES = {"ur5e", "ur10"};
 const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur.yaml";
-constexpr int UR_JOINT_COUNT = 6;
 
-/**
- * @brief Configuration file parameters for mc_rtde
- */
-struct URConfigParameter
+template<ControlMode cm>
+struct URControlLoop
 {
-  URConfigParameter() : cm_(ControlMode::Position), joint_speed_(1.05), joint_acceleration_(1.4), targetIP_("localhost")
-  {
-  }
-  /* Communication information with a real robot */
-  /* ControlMode (position, velocity or torque) */
-  ControlMode cm_;
-  /* joint speed [rad/s] (Valid only when ControlMode is Position) */
-  double joint_speed_;
-  /* joint acceleration [rad/s^2] (Valid only when ControlMode is Position) */
-  double joint_acceleration_;
-  /* Connection target IP */
-  std::string targetIP_;
-};
+  URControlLoop(const std::string & name, const std::string & ip);
 
-/**
- * @brief Current sensor values information of UR5e robot
- */
-struct URSensorInfo
-{
-  URSensorInfo()
-  {
-    qIn_.resize(UR_JOINT_COUNT);
-    dqIn_.resize(UR_JOINT_COUNT);
-    torqIn_.resize(UR_JOINT_COUNT);
-  }
-  /* Position(Angle) values */
-  std::vector<double> qIn_;
-  /* Velocity values */
-  std::vector<double> dqIn_;
-  /* Torque values */
-  std::vector<double> torqIn_;
-};
+  void init(mc_control::MCGlobalController & controller);
 
-/**
- * @brief Command data for sending to UR5e robot
- */
-struct URCommandData
-{
-  URCommandData()
-  {
-    qOut_.resize(UR_JOINT_COUNT);
-    dqOut_.resize(UR_JOINT_COUNT);
-    torqOut_.resize(UR_JOINT_COUNT);
-    for(int i = 0; i < UR_JOINT_COUNT; ++i)
-    {
-      qOut_[i] = 0.0;
-      dqOut_[i] = 0.0;
-      torqOut_[i] = 0.0;
-    }
-  }
-  /* Position(Angle) values */
-  std::vector<double> qOut_;
-  /* Velocity values */
-  std::vector<double> dqOut_;
-  /* Torque values */
-  std::vector<double> torqOut_;
-};
+  void updateSensors(mc_control::MCGlobalController & controller);
 
-/**
- * @brief mc_rtc control interface for UR5e robot
- */
-class URControl
-{
+  void updateControl(mc_control::MCGlobalController & controller);
+
+  void controlThread(mc_control::MCGlobalController & controller,
+                     std::mutex & startM,
+                     std::condition_variable & startCV,
+                     bool & start,
+                     bool & running);
+
+private:
+  std::string name_;
+  mc_rtc::Logger logger_;
+  size_t sensor_id_ = 0;
+  rbd::MultiBodyConfig command_;
+  size_t control_id_ = 0;
+  size_t prev_control_id_ = 0;
+  double delay_ = 0;
+
+  URSensorInfo state_;
+  URControlType<cm> control_;
+
+  uint16_t flags = ur_rtde::RTDEControlInterface::FLAG_VERBOSE | ur_rtde::RTDEControlInterface::FLAG_UPLOAD_SCRIPT;
+
   /* Communication information with a real robot */
   ur_rtde::RTDEControlInterface * ur_rtde_control_;
   ur_rtde::RTDEReceiveInterface * ur_rtde_receive_;
 
-  /* ControlMode (position, velocity or torque) */
-  ControlMode cm_;
-  /* joint speed [rad/s] (Valid only when ControlMode is Position) */
-  double joint_speed_;
-  /* joint acceleration [rad/s^2] (Valid only when ControlMode is Position) */
-  double joint_acceleration_;
-  /* Connection host, robot name or "simulation" */
-  std::string host_;
-  /* Current sensor values information */
-  URSensorInfo stateIn_;
+  mutable std::mutex updateSensorsMutex_;
+  mutable std::mutex updateControlMutex_;
 
-public:
-  /**
-   * @brief Interface constructor and destructor
-   * ur_rtde connection with robot using specified parameters.
-   *
-   * @param config_param Configuration file parameters
-   */
-  URControl(const URConfigParameter & config_param);
+  std::vector<double> sensorsBuffer_ = std::vector<double>(6, 0.0);
+};
 
-  /**
-   * @brief Interface constructor and destructor
-   * Running simulation only. No connection to real robot.
-   *
-   * @param host "simulation" only
-   * @param config_param Configuration file parameters
-   */
-  URControl(const std::string & host, const URConfigParameter & config_param);
+template<ControlMode cm>
+using URControlLoopPtr = std::unique_ptr<URControlLoop<cm>>;
 
-  ~URControl()
+template<ControlMode cm>
+URControlLoop<cm>::URControlLoop(const std::string & name, const std::string & ip)
+: name_(name), logger_(mc_rtc::Logger::Policy::THREADED, "/tmp", "mc-rtde-" + name_), control_(state_)
+{
+  ur_rtde_control_ = new ur_rtde::RTDEControlInterface(ip, 500, flags, 50002, 85);
+  ur_rtde_receive_ = new ur_rtde::RTDEReceiveInterface(ip, 500, {}, false, false, 90);
+}
+
+template<ControlMode cm>
+void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
+{
+  logger_.start(controller.current_controller(), 0.002);
+  logger_.addLogEntry("sensor_id", [this] { return sensor_id_; });
+  logger_.addLogEntry("prev_control_id", [this]() { return prev_control_id_; });
+  logger_.addLogEntry("control_id", [this]() { return control_id_; });
+  logger_.addLogEntry("delay", [this]() { return delay_; });
+  updateSensors(controller);
+  updateControl(controller);
+
+  auto & robot = controller.controller().robots().robot(name_);
+  auto & real = controller.controller().realRobots().robot(name_);
+  const auto & rjo = robot.refJointOrder();
+  for(size_t i = 0; i < rjo.size(); ++i)
   {
-    delete ur_rtde_control_;
-    delete ur_rtde_receive_;
+    auto jIndex = robot.jointIndexByName(rjo[i]);
+    robot.mbc().q[jIndex][0] = ur_rtde_receive_->getActualQ()[i];
+    robot.mbc().jointTorque[jIndex][0] = ur_rtde_control_->getJointTorques()[i];
+  }
+  robot.forwardKinematics();
+  real.mbc() = robot.mbc();
+}
+
+template<ControlMode cm>
+void URControlLoop<cm>::updateSensors(mc_control::MCGlobalController & controller)
+{
+  std::unique_lock<std::mutex> lock(updateSensorsMutex_);
+  auto & robot = controller.robots().robot(name_);
+  using GC = mc_control::MCGlobalController;
+  using set_sensor_t = void (GC::*)(const std::string &, const std::vector<double> &);
+  auto updateSensor = [&controller, &robot, this](set_sensor_t set_sensor, const std::vector<double> & data)
+  {
+    assert(sensorsBuffer_.size() == 6);
+    std::memcpy(sensorsBuffer_.data(), data.data(), 6 * sizeof(double));
+    (controller.*set_sensor)(robot.name(), sensorsBuffer_);
   };
 
-  /**
-   * @brief Save the data received from the robot
-   *
-   * @param state Current sensor values information
-   * @return true Success
-   * @return false Could not receive
-   */
-  bool getState(URSensorInfo & state);
+  updateSensor(&GC::setEncoderValues, state_.qIn_);
+  updateSensor(&GC::setEncoderVelocities, state_.dqIn_);
+  updateSensor(&GC::setJointTorques, state_.torqIn_);
+}
 
-  /**
-   * @brief Set the start state values for simulation
-   *
-   * @param stance Value defined by RobotModule
-   * @param state Current sensor values information
-   */
-  void setStartState(const std::map<std::string, std::vector<double>> & stance, URSensorInfo & state);
+template<ControlMode cm>
+void URControlLoop<cm>::updateControl(mc_control::MCGlobalController & controller)
+{
+  std::unique_lock<std::mutex> lock(updateControlMutex_);
+  auto & robot = controller.robots().robot(name_);
+  command_ = robot.mbc();
+  control_id_++;
+}
 
-  /**
-   * @brief Loop back the value of "data" to "stateIn"
-   *
-   * @param data Command data for sending to UR5e robot
-   * @param state Current sensor values information
-   */
-  void loopbackState(const URCommandData & data, URSensorInfo & state);
+template<ControlMode cm>
+void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controller,
+                                      std::mutex & startM,
+                                      std::condition_variable & startCV,
+                                      bool & start,
+                                      bool & running)
+{
+  {
+    std::unique_lock<std::mutex> lock(startM);
+    startCV.wait(lock, [&]() { return start; });
+  }
 
-  /**
-   * @brief Send control commands to the robot
-   *
-   * @param data Command data for sending to UR5e robot
-   */
-  void sendCmdData(URCommandData & data);
+  std::unique_lock<std::mutex> ctlLock(updateControlMutex_);
+  std::unique_lock<std::mutex> senLock(updateSensorsMutex_);
 
-  /**
-   * @brief The control of the robot is finished
-   */
-  void controlFinished();
-};
+  control_.update(state_);
+  control_.control(*ur_rtde_control_);
+}
 
 } // namespace mc_rtde
