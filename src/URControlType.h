@@ -1,5 +1,6 @@
 #pragma once
 
+#include <RBDyn/MultiBodyConfig.h>
 #include <mc_rbdyn/Robot.h>
 #include <ur_rtde/rtde_control_interface.h>
 
@@ -20,11 +21,11 @@ struct URSensorInfo
     torqIn_.resize(6);
   }
   /* Position(Angle) values */
-  std::vector<double> qIn_;
+  std::vector<double> qIn_ = std::vector<double>(6, 0.0);
   /* Velocity values */
-  std::vector<double> dqIn_;
+  std::vector<double> dqIn_ = std::vector<double>(6, 0.0);
   /* Torque values */
-  std::vector<double> torqIn_;
+  std::vector<double> torqIn_ = std::vector<double>(6, 0.0);
 };
 
 template<ControlMode cm>
@@ -39,25 +40,24 @@ struct URControlType<ControlMode::Position>
 private:
   // Parameters
   const double dt = 0.002;
-  const double lookahead_time = 0.001;
-  const double acceleration = 0.5;
-  const double velocity = 0.5;
-  const double gain = 300;
+  const double lookahead_time = 0.03;
+  const double acceleration = 0.01;
+  const double velocity = 0.05;
+  const double gain = 100;
 
-  URSensorInfo state_;
+  std::vector<double> q = std::vector<double>(6, 0.0);
 
 public:
-  URControlType(const URSensorInfo & state) : state_(state){};
-
-  void update(const URSensorInfo & state)
+  void control(ur_rtde::RTDEControlInterface & robot_, const mc_rbdyn::Robot & robot, const rbd::MultiBodyConfig & mbc)
   {
-    state_ = state;
-  }
+    const auto & rjo = robot.refJointOrder();
+    for(size_t i = 0; i < q.size(); ++i)
+    {
+      q[i] = mbc.q[robot.jointIndexByName(rjo[i])][0];
+    }
 
-  void control(ur_rtde::RTDEControlInterface & robot_)
-  {
     auto start_t = robot_.initPeriod();
-    robot_.servoJ(state_.qIn_, velocity, acceleration, dt, lookahead_time, gain);
+    robot_.servoJ(q, velocity, acceleration, dt, lookahead_time, gain);
     robot_.waitPeriod(start_t);
   }
 };
@@ -69,20 +69,19 @@ private:
   double acceleration = 0.5;
   double dt = 0.002;
 
-  URSensorInfo state_;
+  std::vector<double> dq = std::vector<double>(6, 0.0);
 
 public:
-  URControlType(const URSensorInfo & state) : state_(state){};
-
-  void update(const URSensorInfo & state)
+  void control(ur_rtde::RTDEControlInterface & robot_, const mc_rbdyn::Robot & robot, const rbd::MultiBodyConfig & mbc)
   {
-    state_ = state;
-  }
+    const auto & rjo = robot.refJointOrder();
+    for(size_t i = 0; i < dq.size(); ++i)
+    {
+      dq[i] = mbc.alphaD[robot.jointIndexByName(rjo[i])][0];
+    }
 
-  void control(ur_rtde::RTDEControlInterface & robot_)
-  {
     auto start_t = robot_.initPeriod();
-    robot_.speedJ(state_.dqIn_, acceleration, dt);
+    robot_.speedJ(dq, acceleration, dt);
     robot_.waitPeriod(start_t);
   }
 };
@@ -94,17 +93,8 @@ private:
   double acceleration = 0.5;
   double dt = 0.002;
 
-  URSensorInfo state_;
-
 public:
-  URControlType(const URSensorInfo & state) : state_(state){};
-
-  void update(const URSensorInfo & state)
-  {
-    state_ = state;
-  }
-
-  void control(ur_rtde::RTDEControlInterface & robot_)
+  void control(ur_rtde::RTDEControlInterface & robot_, const mc_rbdyn::Robot & robot, const rbd::MultiBodyConfig & mbc)
   {
     auto start_t = robot_.initPeriod();
     // TODO check the documentation
