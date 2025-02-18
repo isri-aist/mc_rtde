@@ -21,25 +21,25 @@ int sched_setattr(pid_t pid, const struct sched_attr * attr, unsigned int flags)
 
 int main(int argc, char * argv[])
 {
-  struct sched_attr attr;
+  // struct sched_attr attr;
 
-  /* Lock memory */
-  if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
-  {
-    printf("mlockall failed: %m\n");
-    if(errno == ENOMEM)
-    {
-      printf("\nIt is likely your user does not have enough memory limits, you can change the limits by adding the "
-             "following line to /etc/security/limits.conf:\n\n");
-      printf("%s - memlock 1000000000\n\n", getlogin());
-      printf("Then log-in and log-out\n");
-    }
-    return -2;
-  }
+  // /* Lock memory */
+  // if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
+  // {
+  //   printf("mlockall failed: %m\n");
+  //   if(errno == ENOMEM)
+  //   {
+  //     printf("\nIt is likely your user does not have enough memory limits, you can change the limits by adding the "
+  //            "following line to /etc/security/limits.conf:\n\n");
+  //     printf("%s - memlock 1000000000\n\n", getlogin());
+  //     printf("Then log-in and log-out\n");
+  //   }
+  //   return -2;
+  // }
 
   /* Configure deadline policy */
-  memset(&attr, 0, sizeof(attr));
-  attr.size = sizeof(attr);
+  // memset(&attr, 0, sizeof(attr));
+  // attr.size = sizeof(attr);
 
   uint64_t cycle_ns = 1 * 1000 * 1000; // 1 ms default cycle
   char * MC_RT_FREQ = nullptr;
@@ -57,17 +57,17 @@ int main(int argc, char * argv[])
   }
 
   /* Time reservation */
-  attr.sched_policy = SCHED_DEADLINE;
-  attr.sched_runtime = attr.sched_deadline = attr.sched_period = cycle_ns; // nanoseconds
+  // attr.sched_policy = SCHED_DEADLINE;
+  // attr.sched_runtime = attr.sched_deadline = attr.sched_period = cycle_ns; // nanoseconds
 
   printf("Running real-time thread at %fms per cycle\n", cycle_ns / 1e6);
 
   /* Set scheduler policy */
-  if(sched_setattr(0, &attr, 0) < 0)
-  {
-    printf("sched_setattr failed: %m\n");
-    return -2;
-  }
+  // if(sched_setattr(0, &attr, 0) < 0)
+  // {
+  //   printf("sched_setattr failed: %m\n");
+  //   return -2;
+  // }
 
   /* Run */
   mc_rtde::run(data);
