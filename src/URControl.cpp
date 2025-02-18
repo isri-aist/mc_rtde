@@ -229,14 +229,13 @@ void * init(int argc, char * argv[], uint64_t & cycle_ns)
   }
 
   mc_control::MCGlobalController::GlobalConfiguration gconfig(conf_file, nullptr);
-  if(!gconfig.config.has("Franka"))
+  if(!gconfig.config.has("RTDE"))
   {
     mc_rtc::log::error_and_throw<std::runtime_error>(
-        "No Franka section in the configuration, see etc/sample.yaml for an example");
+        "No RTDE section in the configuration, see etc/mc_rtc_ur.yaml for an example");
   }
-  auto frankaConfig = gconfig.config("Franka");
-  ControlMode cm = frankaConfig("ControlMode", ControlMode::Velocity);
-  bool ShowNetworkWarnings = frankaConfig("ShowNetworkWarnings", true);
+  auto urConfig = gconfig.config("RTDE");
+  ControlMode cm = urConfig("ControlMode", ControlMode::Velocity);
   try
   {
     switch(cm)

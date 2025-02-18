@@ -5,7 +5,7 @@ RTDE:
   JointAcceleration: 1.4  # joint acceleration [rad/s^2]
 
   ur5e: # Name of the robot in the controller
-    IP: "localhost"
+    ip: "localhost"
 
   ur10: # Name of the robot in the controller
-    IP: "localhost"
+    ip: "localhost"
