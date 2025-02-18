@@ -1,8 +1,7 @@
 ---
 # Interface specific parameters (mc_rtde)
 RTDE:
-  JointSpeed: 1.05  # joint speed [rad/s]
-  JointAcceleration: 1.4  # joint acceleration [rad/s^2]
+  ControlMode: Position # Can be: Position/Velocity/Torque
 
   ur5e: # Name of the robot in the controller
     ip: "localhost"
