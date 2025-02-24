@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 
 set(CXX_DISABLE_WERROR 1)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 set(PROJECT_NAME mc_rtde)
 set(PROJECT_DESCRIPTION "RTDE robot controller for mc_rtc")
@@ -9,7 +9,13 @@ set(PROJECT_DESCRIPTION "RTDE robot controller for mc_rtc")
 project(
   ${PROJECT_NAME}
   LANGUAGES CXX
-  VERSION 1.0.0)
+  VERSION 1.0.0
+)
+
+find_package(mc_rtc REQUIRED)
+find_package(Boost REQUIRED COMPONENTS program_options thread)
+find_package(ur_rtde REQUIRED) # modern RTDE driver supported from UR CB3
+find_package(ur_modern_driver REQUIRED) # legacy, for UR CB <= 2 with Polyscope <= 1.8
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
 add_subdirectory(src)
@@ -18,4 +24,5 @@ install(
   DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/etc/"
   DESTINATION "${CMAKE_INSTALL_PREFIX}/etc/mc_rtde"
   FILES_MATCHING
-  PATTERN "*.yaml")
+  PATTERN "*.yaml"
+)

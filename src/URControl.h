@@ -4,9 +4,6 @@
 
 #include <mc_control/mc_global_controller.h>
 
-#include <ur_rtde/rtde_control_interface.h>
-#include <ur_rtde/rtde_receive_interface.h>
-
 #include "ControlMode.h"
 #include "URControlType.h"
 
@@ -18,7 +15,7 @@ const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur.yaml";
 template<ControlMode cm>
 struct URControlLoop
 {
-  URControlLoop(const std::string & name, const std::string & ip);
+  URControlLoop(Driver driver, const std::string & name, const std::string & ip);
 
   void init(mc_control::MCGlobalController & controller);
 
@@ -42,13 +39,9 @@ private:
   double delay_ = 0;
 
   URSensorInfo state_;
+
+  std::unique_ptr<DriverBridge> driverBridge_{nullptr};
   URControlType<cm> control_;
-
-  uint16_t flags = ur_rtde::RTDEControlInterface::FLAG_VERBOSE | ur_rtde::RTDEControlInterface::FLAG_UPLOAD_SCRIPT;
-
-  /* Communication information with a real robot */
-  ur_rtde::RTDEControlInterface * ur_rtde_control_;
-  ur_rtde::RTDEReceiveInterface * ur_rtde_receive_;
 
   mutable std::mutex updateSensorsMutex_;
   mutable std::mutex updateControlMutex_;
@@ -60,11 +53,17 @@ template<ControlMode cm>
 using URControlLoopPtr = std::unique_ptr<URControlLoop<cm>>;
 
 template<ControlMode cm>
-URControlLoop<cm>::URControlLoop(const std::string & name, const std::string & ip)
+URControlLoop<cm>::URControlLoop(Driver driver, const std::string & name, const std::string & ip)
 : name_(name), logger_(mc_rtc::Logger::Policy::THREADED, "/tmp", "mc-rtde-" + name_)
 {
-  ur_rtde_control_ = new ur_rtde::RTDEControlInterface(ip, 500, flags, 50002, 85);
-  ur_rtde_receive_ = new ur_rtde::RTDEReceiveInterface(ip, 500, {}, false, false, 90);
+  if(driver == Driver::ur_rtde)
+  {
+    driverBridge_ = std::make_unique<DriverBridgeRTDE>(ip);
+  }
+  else
+  {
+    driverBridge_ = std::make_unique<DriverBridgeURModernDriver>(ip);
+  }
 }
 
 template<ControlMode cm>
@@ -81,8 +80,8 @@ void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
   const auto & rjo = robot.refJointOrder();
   for(size_t i = 0; i < rjo.size(); ++i)
   {
-    state_.qIn_[i] = ur_rtde_receive_->getActualQ()[i];
-    state_.torqIn_[i] = ur_rtde_control_->getJointTorques()[i];
+    state_.qIn_[i] = driverBridge_->getActualQ()[i];
+    state_.torqIn_[i] = driverBridge_->getJointTorques()[i];
 
     auto jIndex = robot.jointIndexByName(rjo[i]);
     robot.mbc().q[jIndex][0] = state_.qIn_[i];
@@ -104,7 +103,8 @@ void URControlLoop<cm>::updateSensors(mc_control::MCGlobalController & controlle
   auto & robot = controller.robots().robot(name_);
   using GC = mc_control::MCGlobalController;
   using set_sensor_t = void (GC::*)(const std::string &, const std::vector<double> &);
-  auto updateSensor = [&controller, &robot, this](set_sensor_t set_sensor, const std::vector<double> & data) {
+  auto updateSensor = [&controller, &robot, this](set_sensor_t set_sensor, const std::vector<double> & data)
+  {
     assert(sensorsBuffer_.size() == 6);
     std::memcpy(sensorsBuffer_.data(), data.data(), 6 * sizeof(double));
     (controller.*set_sensor)(robot.name(), sensorsBuffer_);
@@ -141,13 +141,9 @@ void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controlle
 
   while(running)
   {
-    const auto & rjo = controller.robots().robot(name_).refJointOrder();
-    for(size_t i = 0; i < rjo.size(); ++i)
-    {
-      state_.qIn_[i] = ur_rtde_receive_->getActualQ()[i];
-      state_.torqIn_[i] = ur_rtde_control_->getJointTorques()[i];
-    }
-    control_.control(*ur_rtde_control_, controller.robots().robot(name_), command_);
+    state_.qIn_ = driverBridge_->getActualQ();
+    state_.torqIn_ = driverBridge_->getJointTorques();
+    control_.control(*driverBridge_, controller.robots().robot(name_), command_);
   }
 }
 

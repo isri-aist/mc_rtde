@@ -1,6 +1,6 @@
 
-#include "ControlMode.h"
 #include "URControl.h"
+#include "ControlMode.h"
 #include <condition_variable>
 #include <ctime>
 #include <exception>
@@ -77,16 +77,20 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
     if(rtdeConfig.has(robot.name()))
     {
       std::string ip = rtdeConfig(robot.name())("ip");
-      ur_init_thread.emplace_back([&, ip]() {
-        {
-          std::unique_lock<std::mutex> lock(ur_init_mutex);
-          ur_init_cv.wait(lock, [&ur_init_ready]() { return ur_init_ready; });
-        }
+      auto driverName = rtdeConfig(robot.name())("driver");
+      auto driver = (driverName == "ur_rtde") ? Driver::ur_rtde : Driver::ur_modern_driver;
+      ur_init_thread.emplace_back(
+          [&, ip]()
+          {
+            {
+              std::unique_lock<std::mutex> lock(ur_init_mutex);
+              ur_init_cv.wait(lock, [&ur_init_ready]() { return ur_init_ready; });
+            }
 
-        auto ur = std::unique_ptr<URControlLoop<cm>>(new URControlLoop<cm>(robot.name(), ip));
-        std::unique_lock<std::mutex> lock(ur_init_mutex);
-        urs.emplace_back(std::move(ur));
-      });
+            auto ur = std::unique_ptr<URControlLoop<cm>>(new URControlLoop<cm>(driver, robot.name(), ip));
+            std::unique_lock<std::mutex> lock(ur_init_mutex);
+            urs.emplace_back(std::move(ur));
+          });
     }
     else
     {
@@ -126,42 +130,44 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
   startControl = true;
   startCV.notify_all();
 
-  loop_data->controller_run_ = new std::thread([loop_data]() {
-    auto controller_ptr = loop_data->controller_;
-    auto & controller = *controller_ptr;
-    auto & urs_ = *loop_data->urs;
-    std::mutex controller_run_mtx;
-    std::timespec tv;
-    clock_gettime(CLOCK_REALTIME, &tv);
-    // Current time in milliseconds
-    double current_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6;
-    // Will record the time that passed between two runs
-    double elapsed_t = 0;
-    controller.controller().logger().addLogEntry("mc_franka_delay", [&elapsed_t]() { return elapsed_t; });
-    while(controller.running)
-    {
-      std::unique_lock lck(controller_run_mtx);
-      loop_data->controller_run_cv_.wait(lck);
-      clock_gettime(CLOCK_REALTIME, &tv);
-      elapsed_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6 - current_t;
-      current_t = elapsed_t + current_t;
-
-      // Update from ur sensors
-      for(auto & ur : urs_)
+  loop_data->controller_run_ = new std::thread(
+      [loop_data]()
       {
-        ur->updateSensors(controller);
-      }
+        auto controller_ptr = loop_data->controller_;
+        auto & controller = *controller_ptr;
+        auto & urs_ = *loop_data->urs;
+        std::mutex controller_run_mtx;
+        std::timespec tv;
+        clock_gettime(CLOCK_REALTIME, &tv);
+        // Current time in milliseconds
+        double current_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6;
+        // Will record the time that passed between two runs
+        double elapsed_t = 0;
+        controller.controller().logger().addLogEntry("mc_franka_delay", [&elapsed_t]() { return elapsed_t; });
+        while(controller.running)
+        {
+          std::unique_lock lck(controller_run_mtx);
+          loop_data->controller_run_cv_.wait(lck);
+          clock_gettime(CLOCK_REALTIME, &tv);
+          elapsed_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6 - current_t;
+          current_t = elapsed_t + current_t;
 
-      // Run the controller
-      controller.run();
+          // Update from ur sensors
+          for(auto & ur : urs_)
+          {
+            ur->updateSensors(controller);
+          }
 
-      // Update ur commands
-      for(auto & ur : urs_)
-      {
-        ur->updateControl(controller);
-      }
-    }
-  });
+          // Run the controller
+          controller.run();
+
+          // Update ur commands
+          for(auto & ur : urs_)
+          {
+            ur->updateControl(controller);
+          }
+        }
+      });
 
   return loop_data;
 }
@@ -233,6 +239,8 @@ void * init(int argc, char * argv[], uint64_t & cycle_ns)
   }
   auto urConfig = gconfig.config("RTDE");
   ControlMode cm = urConfig("ControlMode", ControlMode::Position);
+  auto driverConfig = urConfig("Driver", std::string{"ur_rtde"});
+  Driver driver = (driverConfig == "ur_rtde") ? Driver::ur_rtde : Driver::ur_modern_driver;
   try
   {
     switch(cm)

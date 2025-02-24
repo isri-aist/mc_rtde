@@ -6,13 +6,19 @@
 namespace mc_rtde
 {
 
+enum class Driver
+{
+  ur_rtde,
+  ur_modern_driver
+};
+
 enum class ControlMode
 {
   Position,
   Velocity,
   Torque
 };
-}
+} // namespace mc_rtde
 
 namespace mc_rtc
 {
