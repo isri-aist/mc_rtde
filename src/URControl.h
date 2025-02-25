@@ -6,6 +6,8 @@
 
 #include "ControlMode.h"
 #include "URControlType.h"
+#include <mc_rtde/DriverBridgeRTDE.h>
+#include <mc_rtde/DriverBridgeURModernDriver.h>
 
 namespace mc_rtde
 {
@@ -69,6 +71,7 @@ URControlLoop<cm>::URControlLoop(Driver driver, const std::string & name, const 
 template<ControlMode cm>
 void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
 {
+  driverBridge_->sync();
   logger_.start(controller.current_controller(), 0.002);
   logger_.addLogEntry("sensor_id", [this] { return sensor_id_; });
   logger_.addLogEntry("prev_control_id", [this]() { return prev_control_id_; });
@@ -77,16 +80,15 @@ void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
 
   auto & robot = controller.controller().robots().robot(name_);
   auto & real = controller.controller().realRobots().robot(name_);
+  state_.qIn_ = driverBridge_->getActualQ();
+  state_.torqIn_ = driverBridge_->getJointTorques();
   const auto & rjo = robot.refJointOrder();
   for(size_t i = 0; i < rjo.size(); ++i)
   {
-    state_.qIn_[i] = driverBridge_->getActualQ()[i];
-    state_.torqIn_[i] = driverBridge_->getJointTorques()[i];
-
-    auto jIndex = robot.jointIndexByName(rjo[i]);
+    auto jIndex = robot.jointIndexInMBC(i);
     robot.mbc().q[jIndex][0] = state_.qIn_[i];
     robot.mbc().jointTorque[jIndex][0] = state_.torqIn_[i];
-    std::cout << state_.qIn_[i] << std::endl;
+    std::cout << "Initial encoder state: " << state_.qIn_[i] << std::endl;
   }
 
   updateSensors(controller);
@@ -139,11 +141,15 @@ void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controlle
     std::cout << "i passed the wait" << std::endl;
   }
 
+  int runi = 0;
   while(running)
   {
+    std::cout << "run " << runi << std::endl;
+    driverBridge_->sync();
     state_.qIn_ = driverBridge_->getActualQ();
     state_.torqIn_ = driverBridge_->getJointTorques();
     control_.control(*driverBridge_, controller.robots().robot(name_), command_);
+    std::cout << "end run " << runi++ << std::endl;
   }
 }
 

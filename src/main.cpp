@@ -21,7 +21,7 @@ int sched_setattr(pid_t pid, const struct sched_attr * attr, unsigned int flags)
 
 int main(int argc, char * argv[])
 {
-  // struct sched_attr attr;
+  struct sched_attr attr;
 
   // /* Lock memory */
   // if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
@@ -37,7 +37,7 @@ int main(int argc, char * argv[])
   //   return -2;
   // }
 
-  /* Configure deadline policy */
+  // /* Configure deadline policy */
   // memset(&attr, 0, sizeof(attr));
   // attr.size = sizeof(attr);
 

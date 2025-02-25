@@ -77,7 +77,7 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
     if(rtdeConfig.has(robot.name()))
     {
       std::string ip = rtdeConfig(robot.name())("ip");
-      auto driverName = rtdeConfig(robot.name())("driver");
+      auto driverName = rtdeConfig(robot.name())("driver", std::string{"ur_rtde"});
       auto driver = (driverName == "ur_rtde") ? Driver::ur_rtde : Driver::ur_modern_driver;
       ur_init_thread.emplace_back(
           [&, ip]()
@@ -112,6 +112,13 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
   }
 
   controller.init(robots.robot().encoderValues());
+  std::vector<double> qIn(6, 0.0);
+  for(int i = 0; i < 6; ++i)
+  {
+    qIn[i] = robots.robot().mbc().q[robots.robot().jointIndexInMBC(i)][0];
+  }
+  std::cout << "qIn is " << qIn[0] << " " << qIn[1] << " " << qIn[2] << " " << qIn[3] << " " << qIn[4] << " " << qIn[5]
+            << std::endl;
   controller.running = true;
   controller.controller().gui()->addElement(
       {"RTDE"}, mc_rtc::gui::Button("Stop controller", [&controller]() { controller.running = false; }));
@@ -126,9 +133,6 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
     loop_data->ur_threads_->emplace_back(
         [&]() { ur->controlThread(controller, startMutex, startCV, startControl, controller.running); });
   }
-
-  startControl = true;
-  startCV.notify_all();
 
   loop_data->controller_run_ = new std::thread(
       [loop_data]()
@@ -161,6 +165,10 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
           // Run the controller
           controller.run();
 
+          // Wait until the first command has been computed to start the robot's control loop
+          startControl = true;
+          startCV.notify_all();
+
           // Update ur commands
           for(auto & ur : urs_)
           {
@@ -178,11 +186,17 @@ void run_impl(void * data)
   auto control_data = static_cast<ControlLoopData<cm> *>(data);
   auto controller_ptr = control_data->controller_;
   auto & controller = *controller_ptr;
+  // size_t n_steps = std::ceil(controller.controller().timeStep / 0.001);
+  // size_t n_iter = 0;
   while(controller.running)
   {
+    // if(n_iter == 0 || n_iter % n_steps == 0)
+    // {
     control_data->controller_run_cv_.notify_one();
     // Sleep until the next cycle
-    // sched_yield();
+    sched_yield();
+    //   n_iter++;
+    // }
   }
   for(auto & th : *control_data->ur_threads_)
   {
