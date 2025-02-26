@@ -11,12 +11,8 @@ namespace mc_rtde
 
 struct DriverBridgeURModernDriver : public DriverBridge
 {
-  // XXX: not implemented
-  DriverBridgeURModernDriver(const std::string & ip) : rt_state_(msg_cond_), q_(6, 0.0), qd_(6, 0.0), tau_(6, 0.0)
-  {
-    driver_ = std::make_unique<UrDriver>(rt_msg_cond_, msg_cond_, ip);
-    driver_->start();
-  }
+  DriverBridgeURModernDriver(const std::string & ip);
+  ~DriverBridgeURModernDriver() override;
 
   std::vector<double> getActualQ() override;
   std::vector<double> getJointTorques() override
@@ -32,21 +28,19 @@ struct DriverBridgeURModernDriver : public DriverBridge
     return Driver::ur_modern_driver;
   }
 
+  /**
+   * In order for sync to work, you must call setReadData after all data has been read
+   */
   void sync() override;
+  virtual void setDataRead() override
+  {
+    // Reset sync state
+    state().setControllerUpdated();
+  }
 
 protected:
-  void start()
-  {
-    if(not driver_->start())
-    {
-      throw std::runtime_error("Cannot start the UR robot");
-    }
-    sync();
-  }
-  void stop()
-  {
-    driver_->halt();
-  }
+  void start();
+  void stop();
 
   RobotStateRT & state()
   {
@@ -57,24 +51,10 @@ protected:
   std::unique_ptr<UrDriver> driver_;
   std::condition_variable rt_msg_cond_;
   std::condition_variable msg_cond_;
-  RobotStateRT rt_state_;
 
   std::vector<double> q_;
   std::vector<double> qd_;
   std::vector<double> tau_;
-
-public:
-  //! \brief Available command modes
-  enum CommandMode
-  {
-    //! \brief Can be used to only monitor the robot state without moving
-    //! the robot
-    Monitor,
-    //! \brief Control the robot by sending joint position commands
-    JointPositionControl,
-    //! \brief Control the robot by sending joint velcoity commands
-    JointVelocityControl,
-  };
 };
 
 } // namespace mc_rtde

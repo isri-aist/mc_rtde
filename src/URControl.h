@@ -2,6 +2,7 @@
 
 #include <condition_variable>
 
+#include <iostream>
 #include <mc_control/mc_global_controller.h>
 
 #include "ControlMode.h"
@@ -17,7 +18,7 @@ const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur.yaml";
 template<ControlMode cm>
 struct URControlLoop
 {
-  URControlLoop(Driver driver, const std::string & name, const std::string & ip);
+  URControlLoop(Driver driver, const std::string & name, const std::string & ip, double cycle_ms);
 
   void init(mc_control::MCGlobalController & controller);
 
@@ -39,6 +40,7 @@ private:
   size_t control_id_ = 0;
   size_t prev_control_id_ = 0;
   double delay_ = 0;
+  double cycle_ms_ = 0;
 
   URSensorInfo state_;
 
@@ -58,8 +60,8 @@ template<ControlMode cm>
 using URControlLoopPtr = std::unique_ptr<URControlLoop<cm>>;
 
 template<ControlMode cm>
-URControlLoop<cm>::URControlLoop(Driver driver, const std::string & name, const std::string & ip)
-: name_(name), logger_(mc_rtc::Logger::Policy::THREADED, "/tmp", "mc-rtde-" + name_)
+URControlLoop<cm>::URControlLoop(Driver driver, const std::string & name, const std::string & ip, double cycle_ms)
+: name_(name), logger_(mc_rtc::Logger::Policy::THREADED, "/tmp", "mc-rtde-" + name_), cycle_ms_(cycle_ms)
 {
   if(driver == Driver::ur_rtde)
   {
@@ -77,7 +79,7 @@ void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
   // No need for thread synchronization here as the URControlLoop::controlThread is not yet running
 
   driverBridge_->sync(); // ensures that we got the first data
-  logger_.start(controller.current_controller(), 0.002);
+  logger_.start(controller.current_controller(), cycle_ms_);
   logger_.addLogEntry("sensor_id", [this] { return sensor_id_; });
   logger_.addLogEntry("prev_control_id", [this]() { return prev_control_id_; });
   logger_.addLogEntry("control_id", [this]() { return control_id_; });
@@ -142,10 +144,10 @@ void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controlle
                                       bool & running)
 {
   {
-    std::cout << "im here" << std::endl;
+    std::cout << "im here: " << std::endl;
     std::unique_lock<std::mutex> lock(startM);
     startCV.wait(lock, [&]() { return start; });
-    std::cout << "i passed the wait" << std::endl;
+    std::cout << "i passed the wait: " << std::endl;
   }
 
   while(running)
@@ -155,12 +157,16 @@ void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controlle
       std::lock_guard<std::mutex> lock(updateSensorsMutex_);
       state_.qIn_ = driverBridge_->getActualQ();
       state_.torqIn_ = driverBridge_->getJointTorques();
+      driverBridge_->setDataRead();
     }
     auto command = rbd::MultiBodyConfig{};
     {
       std::lock_guard<std::mutex> lock(updateControlMutex_);
       command = command_;
     }
+    using namespace std::chrono;
+    auto time_ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    std::cout << "send command at time: " << time_ms << std::endl;
     control_.control(*driverBridge_, controller.robots().robot(name_), command);
   }
 }

@@ -19,7 +19,9 @@ enum class Driver
  */
 struct DriverBridge
 {
+  virtual ~DriverBridge() = default;
   virtual void sync() = 0;
+  virtual void setDataRead() {}
   virtual std::vector<double> getActualQ() = 0;
   virtual std::vector<double> getJointTorques() = 0;
   virtual void servoJ(const std::vector<double> & q) = 0;

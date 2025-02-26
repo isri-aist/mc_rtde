@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <ctime>
 #include <exception>
+#include <iostream>
 #include <mc_control/mc_global_controller.h>
 #include <mc_rtc/logging.h>
 #include <mutex>
@@ -36,7 +37,7 @@ struct ControlLoopData : public ControlLoopDataBase
 };
 
 template<ControlMode cm>
-void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & qconfig)
+void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & qconfig, const bool & interrupt)
 {
   auto rtdeConfig = qconfig.config("RTDE");
 
@@ -45,14 +46,29 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
   loop_data->ur_threads_ = new std::vector<std::thread>();
   auto & controller = *loop_data->controller_;
 
-  if(controller.controller().timeStep < 0.002)
+  double cycle_ms = rtdeConfig("RobotTimestep");
+  double controller_ms = controller.controller().timeStep;
+  size_t cycle_ns = cycle_ms * 1e6;
+  size_t controller_ns = controller_ms * 1e6;
+  if(controller_ns < cycle_ns)
   {
-    mc_rtc::log::error_and_throw("[mc_rtde] mc_rtc cannot run faster than 2kHz with mc_rtde");
+    mc_rtc::log::error_and_throw(
+        "[mc_rtde] mc_rtc cannot run faster than the robot's control frequency (RobotTimeStep= {}ms, Timestep={}ms)",
+        cycle_ms, controller_ms);
+  }
+  if(controller_ns % cycle_ns != 0)
+  {
+    mc_rtc::log::error_and_throw("[mc_rtde] mc_rtc timestep must be a multiple of the robot's control loop frequency "
+                                 "(RobotTimeStep= {}ms, Timestep={}ms)",
+                                 cycle_ms, controller_ms);
   }
 
-  size_t n_steps = std::ceil(controller.controller().timeStep / 0.001);
-  size_t freq = std::ceil(1 / controller.controller().timeStep);
-  mc_rtc::log::info("[mc_rtde] mc_rtc running at {}Hz, will interpolate every {} ur control step", freq, n_steps);
+  size_t n_steps = controller_ns / cycle_ns;
+  size_t freq = std::ceil(1 / controller_ms);
+  size_t robot_freq = std::ceil(1 / cycle_ms);
+  mc_rtc::log::info(
+      "[mc_rtde] mc_rtc running at {}Hz, robot running at {}Hz, will compute commands every {} robot control step",
+      freq, robot_freq, n_steps);
   auto & robots = controller.controller().robots();
   // Initialize all real robots
   for(size_t i = controller.realRobots().size(); i < robots.size(); ++i)
@@ -87,7 +103,7 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
               ur_init_cv.wait(lock, [&ur_init_ready]() { return ur_init_ready; });
             }
 
-            auto ur = std::unique_ptr<URControlLoop<cm>>(new URControlLoop<cm>(driver, robot.name(), ip));
+            auto ur = std::unique_ptr<URControlLoop<cm>>(new URControlLoop<cm>(driver, robot.name(), ip, cycle_ms));
             std::unique_lock<std::mutex> lock(ur_init_mutex);
             urs.emplace_back(std::move(ur));
           });
@@ -146,7 +162,7 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
   // This frequency must be a multiple (n_steps) of cycle_ns as lower frequencies
   // are simply achieved by calling MCGlobalController every n_steps iterations of the low-level control loop
   loop_data->controller_run_ = new std::thread(
-      [loop_data]()
+      [loop_data, n_steps, &interrupt]()
       {
         auto controller_ptr = loop_data->controller_;
         auto & controller = *controller_ptr;
@@ -160,15 +176,18 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
         double elapsed_t = 0;
         controller.controller().logger().addLogEntry("mc_franka_delay", [&elapsed_t]() { return elapsed_t; });
 
-        // Limit control frequency to a multiple of the low-level robot control frequency
-        // FIXME: hardcoded
-        size_t n_steps = std::ceil(controller.controller().timeStep / 0.001);
-        size_t n_iter = 0;
+        size_t n_iter = n_steps;
 
         while(controller.running)
         {
           std::unique_lock lck(controller_run_mtx);
           loop_data->controller_run_cv_.wait(lck);
+          if(interrupt)
+          {
+            std::cout << "controller_run_ interrupted" << std::endl;
+            controller.running = false;
+            return;
+          }
           clock_gettime(CLOCK_REALTIME, &tv);
           elapsed_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6 - current_t;
           current_t = elapsed_t + current_t;
@@ -179,7 +198,7 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
             ur->updateSensors(controller);
           }
 
-          if(n_iter == 0 || (n_iter % n_steps) == 0)
+          if(n_iter % n_steps == 0)
           {
             // Run the controller
             // std::cout << "Running the controller at iter " << n_iter << std::endl;
@@ -205,11 +224,15 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
 }
 
 template<ControlMode cm>
-void run_impl(void * data)
+void run_impl(void * data, const bool & interrupt)
 {
   auto control_data = static_cast<ControlLoopData<cm> *>(data);
   auto controller_ptr = control_data->controller_;
   auto & controller = *controller_ptr;
+  if(interrupt)
+  {
+    controller.running = false;
+  }
   while(controller.running)
   {
     control_data->controller_run_cv_.notify_one();
@@ -217,33 +240,38 @@ void run_impl(void * data)
     // Sleep until the next cycle
     sched_yield();
   }
+  std::cout << "Waiting for the ur control threads to stop" << std::endl;
   for(auto & th : *control_data->ur_threads_)
   {
     th.join();
   }
+  std::cout << "Waiting for the main control thread to stop" << std::endl;
+  control_data->controller_run_cv_.notify_one();
   control_data->controller_run_->join();
+  std::cout << "Main control thread stopped" << std::endl;
+  control_data->urs->clear();
   delete control_data->urs;
   delete controller_ptr;
 }
 
-void run(void * data)
+void run(void * data, const bool & interrupt)
 {
   auto control_data = static_cast<ControlLoopDataBase *>(data);
   switch(control_data->cm_)
   {
     case ControlMode::Position:
-      run_impl<ControlMode::Position>(data);
+      run_impl<ControlMode::Position>(data, interrupt);
       break;
     case ControlMode::Velocity:
-      run_impl<ControlMode::Velocity>(data);
+      run_impl<ControlMode::Velocity>(data, interrupt);
       break;
     case ControlMode::Torque:
-      run_impl<ControlMode::Torque>(data);
+      run_impl<ControlMode::Torque>(data, interrupt);
       break;
   }
 }
 
-void * init(int argc, char * argv[], uint64_t & cycle_ns)
+void * init(int argc, char * argv[], uint64_t & cycle_ns, const bool & interrupt)
 {
   std::string conf_file = "";
   po::options_description desc("MCControlRTDE options");
@@ -274,16 +302,31 @@ void * init(int argc, char * argv[], uint64_t & cycle_ns)
   ControlMode cm = urConfig("ControlMode", ControlMode::Position);
   auto driverConfig = urConfig("Driver", std::string{"ur_rtde"});
   Driver driver = (driverConfig == "ur_rtde") ? Driver::ur_rtde : Driver::ur_modern_driver;
+  if(urConfig.has("RobotTimestep"))
+  {
+    cycle_ns = static_cast<double>(urConfig("RobotTimestep")) * 1e9;
+  }
+  else
+  {
+    urConfig.add("RobotTimestep", cycle_ns * 1e-9);
+  }
+  auto cycle_ms = cycle_ns * 1e-9;
+  if(cycle_ms < 0.001)
+  {
+    mc_rtc::log::error_and_throw<std::runtime_error>("RobotTimestep must be at least 1ms");
+  }
+  mc_rtc::log::info("RobotTimestep is: {} (frequency={:.2f}Hz), the RT thread will run at this frequency", cycle_ms,
+                    1 / cycle_ms);
   try
   {
     switch(cm)
     {
       case ControlMode::Position:
-        return global_thread_init<ControlMode::Position>(gconfig);
+        return global_thread_init<ControlMode::Position>(gconfig, interrupt);
       case ControlMode::Velocity:
-        return global_thread_init<ControlMode::Velocity>(gconfig);
+        return global_thread_init<ControlMode::Velocity>(gconfig, interrupt);
       case ControlMode::Torque:
-        return global_thread_init<ControlMode::Torque>(gconfig);
+        return global_thread_init<ControlMode::Torque>(gconfig, interrupt);
       default:
         return nullptr;
     }

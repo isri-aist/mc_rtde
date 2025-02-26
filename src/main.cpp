@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <linux/sched.h>
 #include <linux/sched/types.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,8 +20,17 @@ int sched_setattr(pid_t pid, const struct sched_attr * attr, unsigned int flags)
   return syscall(__NR_sched_setattr, pid, attr, flags);
 }
 
+bool interrupt = false;
+
+void signal_handler(int s)
+{
+  printf("Caught signal %d\n", s);
+  interrupt = true;
+}
+
 int main(int argc, char * argv[])
 {
+  signal(SIGINT, signal_handler);
   struct sched_attr attr;
 
   // /* Lock memory */
@@ -49,7 +59,7 @@ int main(int argc, char * argv[])
   }
 
   /* Initialize callback (non real-time yet) */
-  void * data = mc_rtde::init(argc, argv, cycle_ns);
+  void * data = mc_rtde::init(argc, argv, cycle_ns, interrupt);
   if(!data)
   {
     printf("Initialization failed\n");
@@ -70,7 +80,7 @@ int main(int argc, char * argv[])
   }
 
   /* Run */
-  mc_rtde::run(data);
+  mc_rtde::run(data, interrupt);
 
   return 0;
 }
