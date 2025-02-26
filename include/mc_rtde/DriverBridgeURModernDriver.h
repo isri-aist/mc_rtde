@@ -11,7 +11,7 @@ namespace mc_rtde
 
 struct DriverBridgeURModernDriver : public DriverBridge
 {
-  DriverBridgeURModernDriver(const std::string & ip);
+  DriverBridgeURModernDriver(const std::string & ip, double cycle_s);
   ~DriverBridgeURModernDriver() override;
 
   std::vector<double> getActualQ() override;
@@ -51,6 +51,13 @@ protected:
   std::unique_ptr<UrDriver> driver_;
   std::condition_variable rt_msg_cond_;
   std::condition_variable msg_cond_;
+
+  double cycle_s_ = 0.008;
+  double servoJTime_ = cycle_s_;
+  // FIXME: hardcoded
+  // What do these values mean exactly
+  double serjoJLookahead_ = 0.03;
+  double servoJGain_ = 300;
 
   std::vector<double> q_;
   std::vector<double> qd_;

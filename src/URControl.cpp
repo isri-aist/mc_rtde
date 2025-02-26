@@ -46,26 +46,26 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
   loop_data->ur_threads_ = new std::vector<std::thread>();
   auto & controller = *loop_data->controller_;
 
-  double cycle_ms = rtdeConfig("RobotTimestep");
-  double controller_ms = controller.controller().timeStep;
-  size_t cycle_ns = cycle_ms * 1e6;
-  size_t controller_ns = controller_ms * 1e6;
+  double cycle_s = rtdeConfig("RobotTimestep");
+  double controller_s = controller.controller().timeStep;
+  size_t cycle_ns = cycle_s * 1e9;
+  size_t controller_ns = controller_s * 1e9;
   if(controller_ns < cycle_ns)
   {
     mc_rtc::log::error_and_throw(
         "[mc_rtde] mc_rtc cannot run faster than the robot's control frequency (RobotTimeStep= {}ms, Timestep={}ms)",
-        cycle_ms, controller_ms);
+        cycle_s, controller_s);
   }
   if(controller_ns % cycle_ns != 0)
   {
     mc_rtc::log::error_and_throw("[mc_rtde] mc_rtc timestep must be a multiple of the robot's control loop frequency "
                                  "(RobotTimeStep= {}ms, Timestep={}ms)",
-                                 cycle_ms, controller_ms);
+                                 cycle_s, controller_s);
   }
 
   size_t n_steps = controller_ns / cycle_ns;
-  size_t freq = std::ceil(1 / controller_ms);
-  size_t robot_freq = std::ceil(1 / cycle_ms);
+  size_t freq = std::ceil(1 / controller_s);
+  size_t robot_freq = std::ceil(1 / cycle_s);
   mc_rtc::log::info(
       "[mc_rtde] mc_rtc running at {}Hz, robot running at {}Hz, will compute commands every {} robot control step",
       freq, robot_freq, n_steps);
@@ -103,7 +103,7 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
               ur_init_cv.wait(lock, [&ur_init_ready]() { return ur_init_ready; });
             }
 
-            auto ur = std::unique_ptr<URControlLoop<cm>>(new URControlLoop<cm>(driver, robot.name(), ip, cycle_ms));
+            auto ur = std::unique_ptr<URControlLoop<cm>>(new URControlLoop<cm>(driver, robot.name(), ip, cycle_s));
             std::unique_lock<std::mutex> lock(ur_init_mutex);
             urs.emplace_back(std::move(ur));
           });
@@ -310,13 +310,13 @@ void * init(int argc, char * argv[], uint64_t & cycle_ns, const bool & interrupt
   {
     urConfig.add("RobotTimestep", cycle_ns * 1e-9);
   }
-  auto cycle_ms = cycle_ns * 1e-9;
-  if(cycle_ms < 0.001)
+  auto cycle_s = cycle_ns * 1e-9;
+  if(cycle_s < 0.001)
   {
     mc_rtc::log::error_and_throw<std::runtime_error>("RobotTimestep must be at least 1ms");
   }
-  mc_rtc::log::info("RobotTimestep is: {} (frequency={:.2f}Hz), the RT thread will run at this frequency", cycle_ms,
-                    1 / cycle_ms);
+  mc_rtc::log::info("RobotTimestep is: {}s (frequency={:.2f}Hz), the RT thread will run at this frequency", cycle_s,
+                    1 / cycle_s);
   try
   {
     switch(cm)
