@@ -22,7 +22,7 @@ struct ControlLoopDataBase
 
   ControlMode cm_;
   mc_control::MCGlobalController * controller_;
-  std::thread * controller_run_;
+  std::thread * controller_run_ = nullptr;
   std::condition_variable controller_run_cv_;
   std::vector<std::thread> * ur_threads_;
 };
@@ -130,10 +130,21 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
 
   for(auto & ur : urs)
   {
+    // Create UR control threads but don't run them yet, wait on startCV
+    // until the first control command has been computed (by MCGlobalController::run)
     loop_data->ur_threads_->emplace_back(
         [&]() { ur->controlThread(controller, startMutex, startCV, startControl, controller.running); });
   }
 
+  // Create main mc_rtc control thread:
+  // - get the latest sensor readings from the robots
+  // - run mc_rtc controller (MCGlobalController::run)
+  // - sends the latest command
+  //
+  // This thread runs at the same frequency as the low-level control (cycle_ns).
+  // However, the mc_rtc control loop can run at a lower frequency.
+  // This frequency must be a multiple (n_steps) of cycle_ns as lower frequencies
+  // are simply achieved by calling MCGlobalController every n_steps iterations of the low-level control loop
   loop_data->controller_run_ = new std::thread(
       [loop_data]()
       {
@@ -148,6 +159,12 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
         // Will record the time that passed between two runs
         double elapsed_t = 0;
         controller.controller().logger().addLogEntry("mc_franka_delay", [&elapsed_t]() { return elapsed_t; });
+
+        // Limit control frequency to a multiple of the low-level robot control frequency
+        // FIXME: hardcoded
+        size_t n_steps = std::ceil(controller.controller().timeStep / 0.001);
+        size_t n_iter = 0;
+
         while(controller.running)
         {
           std::unique_lock lck(controller_run_mtx);
@@ -156,24 +173,31 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
           elapsed_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6 - current_t;
           current_t = elapsed_t + current_t;
 
-          // Update from ur sensors
+          // Update from the latest available ur sensors (non blocking)
           for(auto & ur : urs_)
           {
             ur->updateSensors(controller);
           }
 
-          // Run the controller
-          controller.run();
+          if(n_iter == 0 || (n_iter % n_steps) == 0)
+          {
+            // Run the controller
+            // std::cout << "Running the controller at iter " << n_iter << std::endl;
+            controller.run();
+          }
 
           // Wait until the first command has been computed to start the robot's control loop
           startControl = true;
           startCV.notify_all();
 
-          // Update ur commands
+          // Update ur commands (non blocking)
+          // If mc_rtc is running at a lower frequency than the low-level control, then intermediate commands
+          // will need to be interpolated (especially for position control)
           for(auto & ur : urs_)
           {
             ur->updateControl(controller);
           }
+          n_iter++;
         }
       });
 
@@ -186,17 +210,12 @@ void run_impl(void * data)
   auto control_data = static_cast<ControlLoopData<cm> *>(data);
   auto controller_ptr = control_data->controller_;
   auto & controller = *controller_ptr;
-  // size_t n_steps = std::ceil(controller.controller().timeStep / 0.001);
-  // size_t n_iter = 0;
   while(controller.running)
   {
-    // if(n_iter == 0 || n_iter % n_steps == 0)
-    // {
     control_data->controller_run_cv_.notify_one();
+
     // Sleep until the next cycle
     sched_yield();
-    //   n_iter++;
-    // }
   }
   for(auto & th : *control_data->ur_threads_)
   {

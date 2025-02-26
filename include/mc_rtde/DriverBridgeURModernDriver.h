@@ -24,16 +24,8 @@ struct DriverBridgeURModernDriver : public DriverBridge
     return tau_;
   }
 
-  void servoJ(const std::vector<double> & q) override
-  {
-    std::cout << "Would servoJ: " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << " " << q[4] << " " << q[5]
-              << std::endl;
-  }
-  void speedJ(const std::vector<double> & qd) override
-  {
-    std::cout << "Would speedJ: " << qd[0] << " " << qd[1] << " " << qd[2] << " " << qd[3] << " " << qd[4] << " "
-              << qd[5] << std::endl;
-  }
+  void servoJ(const std::vector<double> & q) override;
+  void speedJ(const std::vector<double> & qd) override;
 
   Driver driver() const noexcept override
   {

@@ -37,9 +37,9 @@ int main(int argc, char * argv[])
   //   return -2;
   // }
 
-  // /* Configure deadline policy */
-  // memset(&attr, 0, sizeof(attr));
-  // attr.size = sizeof(attr);
+  /* Configure deadline policy */
+  memset(&attr, 0, sizeof(attr));
+  attr.size = sizeof(attr);
 
   uint64_t cycle_ns = 1 * 1000 * 1000; // 1 ms default cycle
   char * MC_RT_FREQ = nullptr;
@@ -57,17 +57,17 @@ int main(int argc, char * argv[])
   }
 
   /* Time reservation */
-  // attr.sched_policy = SCHED_DEADLINE;
-  // attr.sched_runtime = attr.sched_deadline = attr.sched_period = cycle_ns; // nanoseconds
+  attr.sched_policy = SCHED_DEADLINE;
+  attr.sched_runtime = attr.sched_deadline = attr.sched_period = cycle_ns; // nanoseconds
 
   printf("Running real-time thread at %fms per cycle\n", cycle_ns / 1e6);
 
-  /* Set scheduler policy */
-  // if(sched_setattr(0, &attr, 0) < 0)
-  // {
-  //   printf("sched_setattr failed: %m\n");
-  //   return -2;
-  // }
+  /* Set scheduler policy for the main thread */
+  if(sched_setattr(0, &attr, 0) < 0)
+  {
+    printf("sched_setattr failed: %m\n");
+    return -2;
+  }
 
   /* Run */
   mc_rtde::run(data);

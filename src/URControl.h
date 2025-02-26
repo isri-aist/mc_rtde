@@ -45,6 +45,9 @@ private:
   std::unique_ptr<DriverBridge> driverBridge_{nullptr};
   URControlType<cm> control_;
 
+  // To protect against concurrent read/write between:
+  // - the thread URControlLoop::controlThread
+  // - the method URControlLoop::updateSensors called from the controller_run thread (before MCGlobalController::run)
   mutable std::mutex updateSensorsMutex_;
   mutable std::mutex updateControlMutex_;
 
@@ -71,7 +74,9 @@ URControlLoop<cm>::URControlLoop(Driver driver, const std::string & name, const 
 template<ControlMode cm>
 void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
 {
-  driverBridge_->sync();
+  // No need for thread synchronization here as the URControlLoop::controlThread is not yet running
+
+  driverBridge_->sync(); // ensures that we got the first data
   logger_.start(controller.current_controller(), 0.002);
   logger_.addLogEntry("sensor_id", [this] { return sensor_id_; });
   logger_.addLogEntry("prev_control_id", [this]() { return prev_control_id_; });
@@ -101,7 +106,8 @@ void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
 template<ControlMode cm>
 void URControlLoop<cm>::updateSensors(mc_control::MCGlobalController & controller)
 {
-  std::unique_lock<std::mutex> lock(updateSensorsMutex_);
+  std::lock_guard<std::mutex> lock(
+      updateSensorsMutex_); // protects against conurrent write from the URControlLoop::updatecontrol thread
   auto & robot = controller.robots().robot(name_);
   using GC = mc_control::MCGlobalController;
   using set_sensor_t = void (GC::*)(const std::string &, const std::vector<double> &);
@@ -120,7 +126,8 @@ void URControlLoop<cm>::updateSensors(mc_control::MCGlobalController & controlle
 template<ControlMode cm>
 void URControlLoop<cm>::updateControl(mc_control::MCGlobalController & controller)
 {
-  std::unique_lock<std::mutex> lock(updateControlMutex_);
+  std::lock_guard<std::mutex> lock(updateControlMutex_);
+  // In the same thread as MCGlobalController::run, thus we don't need synchronization here
   auto & robot = controller.robots().robot(name_);
   command_ = robot.mbc();
 
@@ -141,15 +148,20 @@ void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controlle
     std::cout << "i passed the wait" << std::endl;
   }
 
-  int runi = 0;
   while(running)
   {
-    std::cout << "run " << runi << std::endl;
     driverBridge_->sync();
-    state_.qIn_ = driverBridge_->getActualQ();
-    state_.torqIn_ = driverBridge_->getJointTorques();
-    control_.control(*driverBridge_, controller.robots().robot(name_), command_);
-    std::cout << "end run " << runi++ << std::endl;
+    {
+      std::lock_guard<std::mutex> lock(updateSensorsMutex_);
+      state_.qIn_ = driverBridge_->getActualQ();
+      state_.torqIn_ = driverBridge_->getJointTorques();
+    }
+    auto command = rbd::MultiBodyConfig{};
+    {
+      std::lock_guard<std::mutex> lock(updateControlMutex_);
+      command = command_;
+    }
+    control_.control(*driverBridge_, controller.robots().robot(name_), command);
   }
 }
 

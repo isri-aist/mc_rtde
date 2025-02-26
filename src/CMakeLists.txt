@@ -14,4 +14,19 @@ target_link_libraries(${PROGRAM_NAME} PUBLIC mc_rtc::mc_control Boost::program_o
 target_link_libraries(${PROGRAM_NAME} PUBLIC ur_rtde::rtde)
 target_link_libraries(${PROGRAM_NAME} PUBLIC ur_modern_driver::ur_modern_driver)
 
+# CAP_SYS_NICE is required to set the SCHED_DEADLINE policy, we set it on the generated
+# executable and the installed one
+set(JOB_POOL_OPTION)
+if(${CMAKE_VERSION} VERSION_GREATER "3.14")
+  set(JOB_POOL_OPTION JOB_POOL console)
+endif()
+add_custom_target(
+  setcap_MCFrankaControl ALL
+  COMMAND ${SUDO} -S ${SETCAP} cap_sys_nice+eip $<TARGET_FILE:${PROGRAM_NAME}>
+  DEPENDS MCFrankaControl ${JOB_POOL_OPTION}
+)
+
 install(TARGETS ${PROGRAM_NAME} DESTINATION bin)
+install(
+  CODE "execute_process(COMMAND ${SUDO} -S ${SETCAP} cap_sys_nice+eip ${CMAKE_INSTALL_PREFIX}/bin/${PROGRAM_NAME})"
+)
