@@ -34,18 +34,18 @@ int main(int argc, char * argv[])
   struct sched_attr attr;
 
   // /* Lock memory */
-  // if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
-  // {
-  //   printf("mlockall failed: %m\n");
-  //   if(errno == ENOMEM)
-  //   {
-  //     printf("\nIt is likely your user does not have enough memory limits, you can change the limits by adding the "
-  //            "following line to /etc/security/limits.conf:\n\n");
-  //     printf("%s - memlock 1000000000\n\n", getlogin());
-  //     printf("Then log-in and log-out\n");
-  //   }
-  //   return -2;
-  // }
+  if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
+  {
+    printf("mlockall failed: %m\n");
+    if(errno == ENOMEM)
+    {
+      printf("\nIt is likely your user does not have enough memory limits, you can change the limits by adding the "
+             "following line to /etc/security/limits.conf:\n\n");
+      printf("%s - memlock 1000000000\n\n", getlogin());
+      printf("Then log-in and log-out\n");
+    }
+    return -2;
+  }
 
   /* Configure deadline policy */
   memset(&attr, 0, sizeof(attr));
