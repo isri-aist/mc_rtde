@@ -2,12 +2,7 @@ set(PROGRAM_NAME MCControlRtde)
 set(CMAKE_INSTALL_RPATH "$ENV{LD_LIBRARY_PATH}")
 
 set(HEADERS URControlType.h URControl.h ControlMode.h thread.h)
-
-if(ur_rtde_FOUND)
-  set(SOURCES main.cpp URControl.cpp)
-else()
-  set(SOURCES main.cpp URControl.cpp DriverBridgeURModernDriver.cpp)
-endif()
+set(SOURCES main.cpp URControl.cpp DriverBridgeURModernDriver.cpp)
 
 include_directories(include)
 
@@ -17,13 +12,8 @@ target_include_directories(
                          $<INSTALL_INTERFACE:include>)
 target_link_libraries(${PROGRAM_NAME} PUBLIC mc_rtc::mc_control
                                              Boost::program_options)
-
-if(ur_rtde_FOUND)
-  target_link_libraries(${PROGRAM_NAME} PUBLIC ur_rtde::rtde)
-else()
-  target_link_libraries(${PROGRAM_NAME}
-                        PUBLIC ur_modern_driver::ur_modern_driver)
-endif()
+target_link_libraries(${PROGRAM_NAME} PUBLIC ur_rtde::rtde)
+target_link_libraries(${PROGRAM_NAME} PUBLIC ur_modern_driver::ur_modern_driver)
 
 # CAP_SYS_NICE is required to set the SCHED_DEADLINE policy, we set it on the
 # generated executable and the installed one

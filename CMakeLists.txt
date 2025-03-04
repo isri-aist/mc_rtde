@@ -14,14 +14,8 @@ project(
 find_package(mc_rtc REQUIRED)
 find_package(Boost REQUIRED COMPONENTS program_options thread)
 
-find_package(ur_rtde) # modern RTDE driver supported from UR CB3
-
-if(NOT ur_rtde_FOUND)
-  find_package(ur_modern_driver REQUIRED) # legacy, for UR CB <= 2 with
-                                          # Polyscope <= 1.8
-else()
-  add_compile_definitions(WITH_RTDE)
-endif()
+find_package(ur_rtde REQUIRED) # modern RTDE driver supported from UR CB3
+find_package(ur_modern_driver REQUIRED)
 
 find_program(SUDO sudo)
 if(NOT SUDO)

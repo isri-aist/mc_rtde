@@ -8,11 +8,8 @@
 #include "ControlMode.h"
 #include "URControlType.h"
 
-#ifdef WITH_RTDE
-#  include <mc_rtde/DriverBridgeRTDE.h>
-#else
-#  include <mc_rtde/DriverBridgeURModernDriver.h>
-#endif
+#include <mc_rtde/DriverBridgeRTDE.h>
+#include <mc_rtde/DriverBridgeURModernDriver.h>
 
 namespace mc_rtde
 {
@@ -67,11 +64,14 @@ template<ControlMode cm>
 URControlLoop<cm>::URControlLoop(Driver driver, const std::string & name, const std::string & ip, double cycle_s)
 : name_(name), logger_(mc_rtc::Logger::Policy::THREADED, "/tmp", "mc-rtde-" + name_), cycle_s_(cycle_s)
 {
-#ifdef WITH_RTDE
-  driverBridge_ = std::make_unique<DriverBridgeRTDE>(ip);
-#else
-  driverBridge_ = std::make_unique<DriverBridgeURModernDriver>(ip, cycle_s_);
-#endif
+  if(driver == Driver::ur_rtde)
+  {
+    driverBridge_ = std::make_unique<DriverBridgeRTDE>(ip);
+  }
+  else
+  {
+    driverBridge_ = std::make_unique<DriverBridgeURModernDriver>(ip, cycle_s_);
+  }
 }
 
 template<ControlMode cm>
