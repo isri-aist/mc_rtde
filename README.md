@@ -138,15 +138,9 @@ Where <mc_rtc_configuration_file.yaml> is based on (e.g).
 
  `<INSTALL_PREFIX>/etc/mc_rtde/<robot>.yaml` --> `/usr/local/etc/mc_rtde/mc_rtc_ur.yaml`
 
-If you wish to run the simulation only use as a simulation (replace the `<robot_hostname>` with simulation)
-
-```
-$ MCControlRtde -h simulation
-```
-
 Your mc_rtc configuration file (`~/.config/mc_rtc/mc_rtc.yaml`) should contain the following lines:
 
-```
+```yaml
 MainRobot: UR5e # or UR10
 Enabled: YourController
 Timestep: 0.001
@@ -168,12 +162,30 @@ RTDE:
 
 Run the program:
 
-```
+```bash
 $ MCControlRtde
 ```
 
 You can also provide an additional configuration file (to swap between different network configurations easily for example):
 
-```
+```bash
 $ MCControlRtde -f conf.yaml
+```
+
+## Toubleshooting
+
+* Known issue
+
+It may happen that some libraries are not found due to the high priviligies given for real-time scheduling. To overcome it, please consider running the following files (change `user_name` by your user name (`whoami`)):
+
+```bash
+sudo echo "/home/{user_name}/workspace/src/catkin_data_ws/install/lib" >> /etc/ld.so.conf.d/mc_rtc_ros.conf
+sudo echo "/home/{user_name}/workspace/install/lib" >> /etc/ld.so.conf.d/mc_rtc.conf
+sudo echo "/opt/ros/humble/lib" >> /etc/ld.so.conf.d/ros2.conf
+```
+
+Then run the following command :
+
+```bash
+sudo ldconfig
 ```
