@@ -174,7 +174,7 @@ void * global_thread_init(mc_control::MCGlobalController::GlobalConfiguration & 
         double current_t = tv.tv_sec * 1000 + tv.tv_nsec * 1e-6;
         // Will record the time that passed between two runs
         double elapsed_t = 0;
-        controller.controller().logger().addLogEntry("mc_franka_delay", [&elapsed_t]() { return elapsed_t; });
+        controller.controller().logger().addLogEntry("mc_rtde_delay", [&elapsed_t]() { return elapsed_t; });
 
         size_t n_iter = n_steps;
 

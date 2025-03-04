@@ -7,8 +7,12 @@
 
 #include "ControlMode.h"
 #include "URControlType.h"
-#include <mc_rtde/DriverBridgeRTDE.h>
-#include <mc_rtde/DriverBridgeURModernDriver.h>
+
+#ifdef WITH_RTDE
+#  include <mc_rtde/DriverBridgeRTDE.h>
+#else
+#  include <mc_rtde/DriverBridgeURModernDriver.h>
+#endif
 
 namespace mc_rtde
 {
@@ -63,14 +67,11 @@ template<ControlMode cm>
 URControlLoop<cm>::URControlLoop(Driver driver, const std::string & name, const std::string & ip, double cycle_s)
 : name_(name), logger_(mc_rtc::Logger::Policy::THREADED, "/tmp", "mc-rtde-" + name_), cycle_s_(cycle_s)
 {
-  if(driver == Driver::ur_rtde)
-  {
-    driverBridge_ = std::make_unique<DriverBridgeRTDE>(ip);
-  }
-  else
-  {
-    driverBridge_ = std::make_unique<DriverBridgeURModernDriver>(ip, cycle_s_);
-  }
+#ifdef WITH_RTDE
+  driverBridge_ = std::make_unique<DriverBridgeRTDE>(ip);
+#else
+  driverBridge_ = std::make_unique<DriverBridgeURModernDriver>(ip, cycle_s_);
+#endif
 }
 
 template<ControlMode cm>
@@ -144,10 +145,8 @@ void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controlle
                                       bool & running)
 {
   {
-    std::cout << "im here: " << std::endl;
     std::unique_lock<std::mutex> lock(startM);
     startCV.wait(lock, [&]() { return start; });
-    std::cout << "i passed the wait: " << std::endl;
   }
 
   while(running)
