@@ -96,7 +96,6 @@ void URControlLoop<cm>::init(mc_control::MCGlobalController & controller)
     auto jIndex = robot.jointIndexInMBC(i);
     robot.mbc().q[jIndex][0] = state_.qIn_[i];
     robot.mbc().jointTorque[jIndex][0] = state_.torqIn_[i];
-    std::cout << "Initial encoder state: " << state_.qIn_[i] << std::endl;
   }
 
   updateSensors(controller);
@@ -165,7 +164,6 @@ void URControlLoop<cm>::controlThread(mc_control::MCGlobalController & controlle
     }
     using namespace std::chrono;
     auto time_ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-    std::cout << "send command at time: " << time_ms << std::endl;
     control_.control(*driverBridge_, controller.robots().robot(name_), command);
   }
 }
