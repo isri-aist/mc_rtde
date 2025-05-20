@@ -92,14 +92,14 @@ LogPolicy : threaded
 
 # Interface specific parameters (mc_rtde)
 RTDE:
-  JointSpeed: 1.05  # joint speed [rad/s]
-  JointAcceleration: 1.4  # joint acceleration [rad/s^2]
+  ControlMode: Position # Can be: Position/Velocity/Torque
 
   ur5e: # Name of the robot in the controller
-    IP: "localhost"
+    ip: "localhost"
+    driver: "ur_rtde" # Can be: "ur_rtde" (>=CB3) or "ur_modern_driver" (<=CB2). Default: ur_rtde
 
-  ur10:
-    IP: "localhost"
+  ur10: # Name of the robot in the controller
+    ip: "localhost"
 ```
 
 Run the program:
