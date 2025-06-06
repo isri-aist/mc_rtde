@@ -49,6 +49,22 @@ $ make
 $ sudo make install
 ```
 
+### Set memory limits
+
+Make sure user account has sufficient memory limits.
+
+Edit `/etc/security/limits.conf` by adding the following line :
+
+```
+USERNAME - memlock 1000000000
+```
+
+Then log-out and log-in or reboot, to confirm the new limit : 
+
+```bash
+ulimit -l
+```
+
 ###  The path set to the ROS library
 
 `MCControlRtde` will not pick up ROS libraries. If you're using `mc_rtc`'s ROS plugin, create a file with content: `/etc/ld.so.conf.d/ros.conf`
@@ -118,12 +134,12 @@ $ MCControlRtde -f conf.yaml
 
 * Known issue
 
-It may happen that some libraries are not found due to the high priviligies given for real-time scheduling. To overcome it, please consider running the following files (change `user_name` by your user name (`whoami`)):
+It may happen that some libraries are not found due to the high priviligies given for real-time scheduling. To overcome it, please consider running the following commands :
 
 ```bash
-sudo echo "/home/{user_name}/workspace/src/catkin_data_ws/install/lib" >> /etc/ld.so.conf.d/mc_rtc_ros.conf
-sudo echo "/home/{user_name}/workspace/install/lib" >> /etc/ld.so.conf.d/mc_rtc.conf
-sudo echo "/opt/ros/humble/lib" >> /etc/ld.so.conf.d/ros2.conf
+echo "$HOME/workspace/src/catkin_data_ws/install/lib" | sudo tee -a /etc/ld.so.conf.d/mc_rtc_ros.conf
+echo "$HOME/workspace/install/lib" | sudo tee -a /etc/ld.so.conf.d/mc_rtc.conf
+echo "/opt/ros/humble/lib" | sudo tee -a /etc/ld.so.conf.d/ros2.conf
 ```
 
 Then run the following command :
