@@ -14,7 +14,6 @@
 namespace mc_rtde
 {
 const std::vector<std::string> ROBOT_NAMES = {"ur5e", "ur10"};
-const std::string CONFIGURATION_FILE = "/usr/local/etc/mc_rtde/mc_rtc_ur.yaml";
 
 template<ControlMode cm>
 struct URControlLoop
