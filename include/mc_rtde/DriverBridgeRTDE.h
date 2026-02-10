@@ -12,7 +12,7 @@ struct DriverBridgeRTDE : public DriverBridge
   DriverBridgeRTDE(const std::string & ip) : DriverBridge()
   {
     ur_rtde_control_ = new ur_rtde::RTDEControlInterface(ip, 500, flags, 50002, 85);
-    ur_rtde_receive_ = new ur_rtde::RTDEReceiveInterface(ip, 500, {}, false, false, 90);
+    ur_rtde_receive_ = new ur_rtde::RTDEReceiveInterface(ip, 500, {}, true, false, 90);
   }
 
   std::vector<double> getActualQ() override
@@ -47,7 +47,7 @@ struct DriverBridgeRTDE : public DriverBridge
   void sync() override {}
 
 protected:
-  uint16_t flags = ur_rtde::RTDEControlInterface::FLAG_VERBOSE | ur_rtde::RTDEControlInterface::FLAG_UPLOAD_SCRIPT;
+  uint16_t flags = ur_rtde::RTDEControlInterface::FLAG_VERBOSE | ur_rtde::RTDEControlInterface::FLAG_USE_EXT_UR_CAP;
 
   /* Communication information with a real robot */
   ur_rtde::RTDEControlInterface * ur_rtde_control_;
