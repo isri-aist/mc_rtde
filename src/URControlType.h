@@ -43,8 +43,7 @@ private:
 public:
   void control(DriverBridge & driverBridge, const mc_rbdyn::Robot & robot, const rbd::MultiBodyConfig & mbc)
   {
-    const auto & rjo = robot.refJointOrder();
-    for(size_t i = 0; i < rjo.size(); ++i)
+    for(size_t i = 0; i < q.size(); ++i)
     {
       q[i] = mbc.q[robot.jointIndexInMBC(i)][0];
     }
@@ -65,7 +64,7 @@ public:
     const auto & rjo = robot.refJointOrder();
     for(size_t i = 0; i < dq.size(); ++i)
     {
-      dq[i] = mbc.alphaD[robot.jointIndexByName(rjo[i])][0];
+      dq[i] = mbc.alphaD[robot.jointIndexInMBC(i)][0];
     }
 
     driverBridge.speedJ(dq);

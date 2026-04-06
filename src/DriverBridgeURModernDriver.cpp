@@ -82,4 +82,5 @@ void DriverBridgeURModernDriver::stop()
 
   driver_->halt();
 }
+
 } // namespace mc_rtde

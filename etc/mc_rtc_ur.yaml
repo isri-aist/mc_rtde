@@ -6,6 +6,13 @@ RTDE:
   ur5e: # Name of the robot in the controller
     ip: "localhost"
     driver: "ur_rtde" # Can be: "ur_rtde" (>=CB3) or "ur_modern_driver" (<=CB2). Default: ur_rtde
+    ur5e_tool:
+      tool_name: # Name of the tool attached to the robot
+        type: robotiq # Only robotiq is supported now
+        ip: "localhost" # [Optional] Robot's ip is used by default
+        port: 63352 # [Optional]
+      another_tool_name:
+        type: type_name
 
   ur7e: # Name of the robot in the controller
     ip: "localhost"

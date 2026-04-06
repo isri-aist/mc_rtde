@@ -1,8 +1,6 @@
 # mc_rtde
 Interface between [Universal robots](https://www.universal-robots.com/) and [mc_rtc](https://jrl-umi3218.github.io/mc_rtc). Provides connectivity with [UR5e | UR7e](https://www.universal-robots.com/products/ur5-robot/) and [UR10](https://www.universal-robots.com/products/ur10e/) robots.
 
-> **Please note that it has not been tested with the latest Polyscope version (5.24).**
-
 ## 1. Required dependencies
 
 - [mc_rtc](https://jrl-umi3218.github.io/mc_rtc/)
@@ -107,7 +105,7 @@ $ MCControlRtde -f <mc_rtc_configuration_file.conf>
 
 Where <mc_rtc_configuration_file.yaml> is based on (e.g).
 
- `<INSTALL_PREFIX>/etc/mc_rtde/<robot>.yaml` --> `/usr/local/etc/mc_rtde/mc_rtc_ur.yaml`
+`<INSTALL_PREFIX>/etc/mc_rtde/<robot>.yaml` --> `/usr/local/etc/mc_rtde/mc_rtc_ur.yaml`
 
 Your mc_rtc configuration file (`~/.config/mc_rtc/mc_rtc.yaml`) should contain the following lines:
 
@@ -126,6 +124,11 @@ RTDE:
   ur5e: # Name of the robot in the controller
     ip: "localhost"
     driver: "ur_rtde" # Can be: "ur_rtde" (>=CB3) or "ur_modern_driver" (<=CB2). Default: ur_rtde
+    gripper:
+      name: "<gripper_name>" # Name of the gripper attached to the robot
+      type: robotiq # Only robotiq is supported now
+      ip: "localhost" # [Optional] Robot's ip is used by default
+      port: 63352 # [Optional]
 
   ur7e: # Name of the robot in the controller
     ip: "localhost"
@@ -146,7 +149,21 @@ You can also provide an additional configuration file (to swap between different
 $ MCControlRtde -f conf.yaml
 ```
 
-## Toubleshooting
+### Gripper Integration
+
+The gripper is loaded as an independent robot in the mc_rtc controller and controlled via a posture task. It can be attached to the main robots by `addContact`.
+```CPP
+robots().robot("<gripper>").posW(robots().robot("<main_robot").surfacePose("<mounting_surface>"));
+addContact({"<main_robot>", "<gripper>", "<mounting_surface>", "<gripper_base>"});
+```
+
+#### Limitation
+
+The tested Robotiq gripper does not support real-time control. To avoid flooding the gripper, the interface only sends a new command when the mc_rtc commanded position has reached steady state. As a result:
+- The real gripper will lag behind the simulated gripper
+- Posture task gains do not have the same effect as on other robots — the gripper moves at its own pace once a command is sent
+
+## 5. Toubleshooting
 
 ### Known issue
 

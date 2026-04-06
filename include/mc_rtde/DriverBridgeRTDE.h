@@ -11,15 +11,17 @@ struct DriverBridgeRTDE : public DriverBridge
 {
   DriverBridgeRTDE(const std::string & ip) : DriverBridge()
   {
-    ur_rtde_control_ = new ur_rtde::RTDEControlInterface(ip, 500, flags, 50002, 85);
     ur_rtde_receive_ = new ur_rtde::RTDEReceiveInterface(ip, 500, {}, false, false, 90);
+    ur_rtde_control_ = new ur_rtde::RTDEControlInterface(ip, 500, flags, 50002, 85);
   }
 
+  // ---------- ur_rtde_receive_ -----------------------------------------------
   std::vector<double> getActualQ() override
   {
     return ur_rtde_receive_->getActualQ();
   }
 
+  // ---------- ur_rtde_control_ -----------------------------------------------
   std::vector<double> getJointTorques() override
   {
     return ur_rtde_control_->getJointTorques();
